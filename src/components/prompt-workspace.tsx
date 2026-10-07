@@ -27,6 +27,8 @@ import { DiffViewer } from "./diff-viewer";
 import { DiagnosticsPanel } from "./diagnostics-badge";
 import { TestModal } from "./test-modal";
 
+import { BrandMark } from "./brand-mark";
+
 const KINDS: { id: PromptKind; label: string; icon: typeof MessageSquare }[] = [
   { id: "user", label: "User prompt", icon: MessageSquare },
   { id: "system", label: "System prompt", icon: Terminal },
@@ -181,27 +183,23 @@ export function PromptWorkspace() {
 
   return (
     <>
-      <header className="sticky top-0 z-30 border-b border-zinc-800/80 bg-zinc-950/80 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3.5">
+      <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur">
+        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 via-purple-600 to-fuchsia-600 shadow-lg shadow-violet-950/50">
-              <Sparkles className="h-5 w-5 text-white" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-base font-semibold tracking-tight text-zinc-100">
-                  Prompt Optimizer
-                </h1>
-                <span className="rounded-md border border-violet-800/60 bg-violet-950/60 px-1.5 py-0.5 text-[10px] font-medium text-violet-300">
-                  DeepSeek Flash
-                </span>
-                <span className="rounded-md border border-emerald-800/60 bg-emerald-950/60 px-1.5 py-0.5 text-[10px] font-medium text-emerald-300">
-                  Jev Diagnostics
-                </span>
-              </div>
-              <p className="text-xs text-zinc-400">
-                System One probabilistic rubric linter + DeepSeek platform engine
-              </p>
+            <BrandMark className="size-6" />
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold tracking-tight text-foreground">
+                Prompt Optimizer
+              </span>
+              <span className="rounded-full border border-border bg-surface-muted px-2 py-0.5 text-[10px] font-medium text-muted-fg">
+                NODAYSIDLE
+              </span>
+              <span className="hidden sm:inline-flex rounded-full border border-violet-800/60 bg-violet-950/60 px-2 py-0.5 text-[10px] font-medium text-violet-300">
+                DeepSeek Flash
+              </span>
+              <span className="hidden md:inline-flex rounded-full border border-emerald-800/60 bg-emerald-950/60 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
+                TypeSafe Jev
+              </span>
             </div>
           </div>
 
@@ -210,9 +208,9 @@ export function PromptWorkspace() {
               type="button"
               onClick={() => setSettingsOpen(true)}
               className={cn(
-                "inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium transition",
+                "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition",
                 settings.deepseekApiKey
-                  ? "border-zinc-700 bg-zinc-900 text-zinc-200 hover:border-zinc-500"
+                  ? "border-border bg-surface text-foreground hover:border-accent"
                   : "border-amber-700/60 bg-amber-950/30 text-amber-300 hover:border-amber-500",
               )}
             >
@@ -545,6 +543,25 @@ export function PromptWorkspace() {
           </section>
         )}
       </main>
+
+      <footer className="mt-auto border-t border-border py-6 bg-surface/30">
+        <div className="mx-auto flex max-w-6xl flex-col sm:flex-row items-center justify-between gap-3 px-4 text-xs text-muted-fg">
+          <div className="flex items-center gap-2">
+            <BrandMark className="size-4" />
+            <span>
+              Part of the <strong className="text-foreground">NODAYSIDLE</strong> workspace · DeepSeek Flash + TypeSafe Jev
+            </span>
+          </div>
+          <a
+            href="https://github.com/nodaysidle/nodaysidle-prompt-optimizer"
+            target="_blank"
+            rel="noreferrer"
+            className="hover:text-foreground transition underline underline-offset-4"
+          >
+            GitHub
+          </a>
+        </div>
+      </footer>
 
       <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
 

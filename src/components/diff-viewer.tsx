@@ -29,32 +29,37 @@ export function DiffViewer({ original, optimized, className }: DiffViewerProps) 
 
   if (!optimized) {
     return (
-      <div className="flex h-48 items-center justify-center text-sm text-zinc-600">
-        Run optimization to see interactive word-level diff
+      <div className="flex h-48 items-center justify-center text-xs text-muted-fg">
+        Run prompt optimization to see an interactive token-by-token comparison.
       </div>
     );
   }
 
   return (
     <div className={cn("space-y-3", className)}>
-      <div className="flex items-center gap-4 text-xs font-mono text-zinc-400">
-        <span className="inline-flex items-center gap-1.5 text-emerald-400">
-          <span className="h-2 w-2 rounded-full bg-emerald-500" />
-          +{additions} words added
-        </span>
-        <span className="inline-flex items-center gap-1.5 text-rose-400">
-          <span className="h-2 w-2 rounded-full bg-rose-500" />
-          -{deletions} words removed
+      <div className="flex flex-wrap items-center justify-between gap-3 text-xs border-b border-border/80 pb-2.5">
+        <div className="flex items-center gap-3 font-mono">
+          <span className="inline-flex items-center gap-1.5 text-emerald-400 font-medium">
+            <span className="h-2 w-2 rounded-full bg-emerald-400" />
+            +{additions} words added (instructions & constraints)
+          </span>
+          <span className="inline-flex items-center gap-1.5 text-rose-400 font-medium">
+            <span className="h-2 w-2 rounded-full bg-rose-400" />
+            -{deletions} words trimmed (filler & vagueness)
+          </span>
+        </div>
+        <span className="text-[11px] text-muted-fg">
+          Word-by-word diff
         </span>
       </div>
 
-      <div className="max-h-[420px] overflow-auto rounded-xl border border-zinc-800 bg-zinc-950/70 p-4 font-mono text-sm leading-relaxed whitespace-pre-wrap select-text">
+      <div className="max-h-[420px] overflow-auto rounded-xl border border-border bg-background/60 p-4 font-mono text-sm leading-relaxed whitespace-pre-wrap select-text">
         {changes.map((part, index) => {
           if (part.added) {
             return (
               <span
                 key={index}
-                className="rounded bg-emerald-950/70 text-emerald-300 font-medium px-1 py-0.5 border border-emerald-800/60"
+                className="rounded bg-emerald-950/70 text-emerald-200 font-medium px-1 py-0.5 border border-emerald-800/60"
               >
                 {part.value}
               </span>
@@ -70,7 +75,7 @@ export function DiffViewer({ original, optimized, className }: DiffViewerProps) 
               </span>
             );
           }
-          return <span key={index} className="text-zinc-300">{part.value}</span>;
+          return <span key={index} className="text-foreground">{part.value}</span>;
         })}
       </div>
     </div>

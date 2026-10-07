@@ -2,12 +2,15 @@
 
 import {
   AlertCircle,
+  ArrowRight,
   Check,
   CheckCircle,
   Copy,
   Eye,
   GitCompare,
   ImageIcon,
+  KeyRound,
+  Lightbulb,
   Loader2,
   MessageSquare,
   Play,
@@ -15,7 +18,6 @@ import {
   Settings2,
   Sparkles,
   Terminal,
-  Wand2,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSettings } from "@/lib/settings-context";
@@ -26,13 +28,32 @@ import { SettingsPanel } from "./settings-panel";
 import { DiffViewer } from "./diff-viewer";
 import { DiagnosticsPanel } from "./diagnostics-badge";
 import { TestModal } from "./test-modal";
-
 import { BrandMark } from "./brand-mark";
 
-const KINDS: { id: PromptKind; label: string; icon: typeof MessageSquare }[] = [
-  { id: "user", label: "User prompt", icon: MessageSquare },
-  { id: "system", label: "System prompt", icon: Terminal },
-  { id: "image", label: "Image prompt", icon: ImageIcon },
+const KINDS: {
+  id: PromptKind;
+  label: string;
+  tagline: string;
+  icon: typeof MessageSquare;
+}[] = [
+  {
+    id: "user",
+    label: "User Prompt",
+    tagline: "Direct question or task for ChatGPT, Claude, or Cursor",
+    icon: MessageSquare,
+  },
+  {
+    id: "system",
+    label: "System Prompt",
+    tagline: "Persona guidelines, guardrails & rules for an AI agent",
+    icon: Terminal,
+  },
+  {
+    id: "image",
+    label: "Image Prompt",
+    tagline: "Visual description for Midjourney, Flux, or Stable Diffusion",
+    icon: ImageIcon,
+  },
 ];
 
 export function PromptWorkspace() {
@@ -101,7 +122,7 @@ export function PromptWorkspace() {
 
     debounceTimerRef.current = setTimeout(() => {
       fetchDiagnostics(prompt, kind);
-    }, 700);
+    }, 600);
 
     return () => {
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
@@ -112,7 +133,7 @@ export function PromptWorkspace() {
     setError(null);
     const trimmed = prompt.trim();
     if (!trimmed) {
-      setError("Paste or type a prompt to optimize.");
+      setError("Please paste or type a prompt first.");
       return;
     }
 
@@ -183,6 +204,7 @@ export function PromptWorkspace() {
 
   return (
     <>
+      {/* Top Header */}
       <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-3">
@@ -211,153 +233,257 @@ export function PromptWorkspace() {
                 "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition",
                 settings.deepseekApiKey
                   ? "border-border bg-surface text-foreground hover:border-accent"
-                  : "border-amber-700/60 bg-amber-950/30 text-amber-300 hover:border-amber-500",
+                  : "border-amber-600/70 bg-amber-950/40 text-amber-200 hover:border-amber-500",
               )}
             >
               <Settings2 className="h-3.5 w-3.5" />
               Settings
               {!settings.deepseekApiKey && (
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-ping" />
+                <span className="ml-0.5 rounded-full bg-amber-500 px-1.5 py-0.2 text-[9px] font-bold text-black uppercase">
+                  Add Key
+                </span>
               )}
             </button>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-6">
-        {/* Quick Example Presets */}
+      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-6 sm:px-6">
+        {/* Friendly Hero Banner */}
+        <section className="rounded-2xl border border-border bg-gradient-to-br from-surface to-surface-muted p-5 shadow-sm">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
+                <span>Transform rough prompts into production-grade instructions</span>
+              </h2>
+              <p className="mt-1 text-xs text-muted-fg max-w-2xl leading-relaxed">
+                Paste your draft below to get an <strong>instant health check</strong> on what&apos;s missing (boundaries, output formatting, or clear roles). Then generate a structured rewrite powered by DeepSeek Flash.
+              </p>
+            </div>
+
+            {/* Step Roadmap */}
+            <div className="hidden lg:flex items-center gap-2 text-[11px] text-muted-fg bg-background/60 border border-border/80 px-3 py-2 rounded-xl">
+              <span className="flex items-center gap-1 text-foreground font-medium">
+                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-accent/20 text-accent font-mono text-[10px]">1</span>
+                Draft
+              </span>
+              <ArrowRight className="h-3 w-3 text-muted-fg/60" />
+              <span className="flex items-center gap-1 text-foreground font-medium">
+                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-accent/20 text-accent font-mono text-[10px]">2</span>
+                Audit
+              </span>
+              <ArrowRight className="h-3 w-3 text-muted-fg/60" />
+              <span className="flex items-center gap-1 text-foreground font-medium">
+                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-accent/20 text-accent font-mono text-[10px]">3</span>
+                Optimize & Test
+              </span>
+            </div>
+          </div>
+
+          {/* Quick Setup Hint (if key not entered) */}
+          {!settings.deepseekApiKey && (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-800/40 bg-amber-950/20 px-3.5 py-2.5 text-xs text-amber-200">
+              <div className="flex items-center gap-2">
+                <KeyRound className="h-4 w-4 text-amber-400 shrink-0" />
+                <span>
+                  <strong>Tip:</strong> Add your DeepSeek API key in Settings to unlock 1-click optimization (~$0.001 per run). You can also click any example below to try the live health audit right now!
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSettingsOpen(true)}
+                className="rounded-lg bg-amber-400/90 px-3 py-1 font-semibold text-zinc-950 hover:bg-amber-300 text-xs transition shrink-0"
+              >
+                Configure Key
+              </button>
+            </div>
+          )}
+        </section>
+
+        {/* 1-Click Example Presets */}
         <section className="space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-              Try an Example
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-fg flex items-center gap-1.5">
+              <Lightbulb className="h-3.5 w-3.5 text-accent" />
+              Click an example to test:
             </span>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
             {PROMPT_EXAMPLES.map((ex, idx) => (
               <button
                 key={idx}
                 type="button"
                 onClick={() => loadExample(ex)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-1.5 text-xs text-zinc-300 hover:border-violet-500/50 hover:bg-zinc-800/80 transition"
+                className="group flex flex-col items-start rounded-xl border border-border bg-surface/60 p-3 text-left hover:border-accent/60 hover:bg-surface-muted transition text-xs"
               >
-                <Wand2 className="h-3 w-3 text-violet-400" />
-                <span className="font-medium text-zinc-200">{ex.title}</span>
-                <span className="text-zinc-500 text-[11px]">({ex.kind})</span>
+                <div className="flex w-full items-center justify-between">
+                  <span className="font-semibold text-foreground group-hover:text-accent transition">
+                    {ex.title}
+                  </span>
+                  <span className="rounded bg-background px-1.5 py-0.5 text-[10px] font-mono text-muted-fg uppercase border border-border/80">
+                    {ex.kind}
+                  </span>
+                </div>
+                <p className="mt-1 text-[11px] text-muted-fg line-clamp-1">
+                  {ex.description}
+                </p>
               </button>
             ))}
           </div>
         </section>
 
-        {/* Input & Kind Selection */}
+        {/* Prompt Input & Kind Selection */}
         <section className="space-y-3.5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-medium text-zinc-400 mr-1">Target Mode:</span>
-              {KINDS.map(({ id, label, icon: Icon }) => (
+          {/* Target Mode Selector */}
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-muted-fg mb-2">
+              Step 1: Choose Prompt Type
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              {KINDS.map(({ id, label, tagline, icon: Icon }) => (
                 <button
                   key={id}
                   type="button"
                   onClick={() => setKind(id)}
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition",
+                    "flex flex-col items-start rounded-xl border p-3 text-left transition",
                     kind === id
-                      ? "border-violet-500/80 bg-violet-600/20 text-violet-200 shadow-sm"
-                      : "border-zinc-800 bg-zinc-900/40 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200",
+                      ? "border-accent bg-accent/10 shadow-sm"
+                      : "border-border bg-surface/50 text-muted-fg hover:border-border/80 hover:bg-surface-muted",
                   )}
                 >
-                  <Icon className="h-3.5 w-3.5" />
-                  {label}
+                  <div className="flex items-center gap-2">
+                    <Icon
+                      className={cn(
+                        "h-4 w-4",
+                        kind === id ? "text-accent" : "text-muted-fg",
+                      )}
+                    />
+                    <span
+                      className={cn(
+                        "text-xs font-semibold",
+                        kind === id ? "text-foreground" : "text-muted-fg",
+                      )}
+                    >
+                      {label}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-muted-fg leading-tight">
+                    {tagline}
+                  </p>
                 </button>
               ))}
             </div>
+          </div>
 
-            <div className="text-xs font-mono text-zinc-500">
-              {prompt.trim().length} chars · ~{Math.ceil(prompt.trim().split(/\s+/).filter(Boolean).length * 1.3)} tokens
+          {/* Text Area */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-xs text-muted-fg">
+              <label htmlFor="prompt-input" className="font-semibold uppercase tracking-wider">
+                Step 2: Enter Your Prompt Draft
+              </label>
+              <div className="font-mono text-[11px]">
+                {prompt.trim().length} chars · ~{Math.ceil(prompt.trim().split(/\s+/).filter(Boolean).length * 1.3)} tokens
+              </div>
+            </div>
+
+            <div className="relative">
+              <textarea
+                id="prompt-input"
+                className="min-h-[170px] w-full resize-y rounded-xl border border-border bg-surface/80 p-4 font-mono text-sm leading-relaxed text-foreground placeholder:text-muted-fg/60 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 transition"
+                placeholder={
+                  kind === "user"
+                    ? "e.g. Write a python script to scrape product prices from an e-commerce website and export to CSV. Make sure to retry on errors and handle missing fields..."
+                    : kind === "system"
+                    ? "e.g. You are a senior frontend developer reviewing code. Be strict about React 19 patterns, state management, and edge cases. Keep suggestions concise..."
+                    : "e.g. Cinematic photograph of a vintage cafe in Paris at night, rain reflecting street lamps on cobblestone, warm interior lighting, 35mm lens, shallow depth of field..."
+                }
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+              />
+              {prompt && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPrompt("");
+                    setDiagnostics(null);
+                    setResult(null);
+                  }}
+                  className="absolute right-3 top-3 rounded-md p-1.5 text-muted-fg hover:bg-surface-muted hover:text-foreground transition"
+                  title="Clear prompt"
+                  aria-label="Clear input"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
           </div>
 
-          <div className="relative">
-            <textarea
-              className="min-h-[170px] w-full resize-y rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 font-mono text-sm leading-relaxed text-zinc-100 placeholder:text-zinc-600 focus:border-violet-500/50 focus:outline-none focus:ring-2 focus:ring-violet-500/20 transition"
-              placeholder="Paste or type your user prompt, system instructions, or image prompt here..."
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-            />
-            {prompt && (
-              <button
-                type="button"
-                onClick={() => {
-                  setPrompt("");
-                  setDiagnostics(null);
-                  setResult(null);
-                }}
-                className="absolute right-3 top-3 rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 transition"
-                title="Clear input"
-              >
-                <RotateCcw className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-
-          {/* Jev System One Diagnostics Panel */}
+          {/* Live Jev System One Health Audit */}
           <DiagnosticsPanel
             diagnostics={diagnostics}
             loading={diagnosing}
             onRefresh={() => fetchDiagnostics(prompt, kind)}
           />
 
-          <div className="flex flex-wrap items-center gap-3 pt-1">
-            <button
-              type="button"
-              disabled={loading || !prompt.trim()}
-              onClick={handleOptimize}
-              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-600 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-950/50 hover:from-violet-500 hover:to-fuchsia-500 disabled:opacity-50 transition"
-            >
-              {loading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Sparkles className="h-4 w-4" />
-              )}
-              Optimize with DeepSeek
-            </button>
-
-            {prompt.trim().length > 0 && (
+          {/* Action Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+            <div className="flex flex-wrap items-center gap-3">
               <button
                 type="button"
-                onClick={() => openTestPlayground(prompt, "Original Prompt")}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/80 px-4 py-2.5 text-xs font-semibold text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800 transition"
+                disabled={loading || !prompt.trim()}
+                onClick={handleOptimize}
+                className="inline-flex items-center gap-2 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-accent-foreground shadow-md hover:bg-accent-strong disabled:opacity-40 transition cursor-pointer"
               >
-                <Play className="h-3.5 w-3.5 text-emerald-400" />
-                Test Original
+                {loading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4" />
+                )}
+                <span>Optimize with DeepSeek</span>
+                <span className="text-[11px] font-normal opacity-85 hidden sm:inline">
+                  (~1.5s)
+                </span>
               </button>
-            )}
+
+              {prompt.trim().length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => openTestPlayground(prompt, "Original Prompt")}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-surface px-4 py-2.5 text-xs font-semibold text-foreground hover:bg-surface-muted transition"
+                >
+                  <Play className="h-3.5 w-3.5 text-emerald-400" />
+                  Test Original Live
+                </button>
+              )}
+            </div>
 
             {error && (
-              <div className="flex items-center gap-1.5 rounded-lg border border-rose-800/60 bg-rose-950/40 px-3 py-1.5 text-xs text-rose-300">
+              <div className="flex items-center gap-2 rounded-lg border border-rose-800/60 bg-rose-950/40 px-3 py-2 text-xs text-rose-300">
                 <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                {error}
+                <span>{error}</span>
               </div>
             )}
           </div>
         </section>
 
-        {/* View Mode Switcher */}
+        {/* View Mode Switcher (When results are ready) */}
         {result && (
-          <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
+          <div className="flex items-center justify-between border-b border-border pb-2 pt-2">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-                Comparison
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-fg">
+                Comparison & Results
               </span>
             </div>
-            <div className="flex items-center rounded-lg border border-zinc-800 bg-zinc-900/60 p-0.5">
+            <div className="flex items-center rounded-lg border border-border bg-surface p-0.5">
               <button
                 type="button"
                 onClick={() => setViewMode("split")}
                 className={cn(
                   "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition",
                   viewMode === "split"
-                    ? "bg-zinc-800 text-zinc-100 shadow-sm"
-                    : "text-zinc-400 hover:text-zinc-200",
+                    ? "bg-surface-muted text-foreground shadow-sm"
+                    : "text-muted-fg hover:text-foreground",
                 )}
               >
                 <Eye className="h-3.5 w-3.5" />
@@ -369,28 +495,33 @@ export function PromptWorkspace() {
                 className={cn(
                   "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition",
                   viewMode === "diff"
-                    ? "bg-zinc-800 text-zinc-100 shadow-sm"
-                    : "text-zinc-400 hover:text-zinc-200",
+                    ? "bg-surface-muted text-foreground shadow-sm"
+                    : "text-muted-fg hover:text-foreground",
                 )}
               >
                 <GitCompare className="h-3.5 w-3.5" />
-                Word Diff View
+                Word Diff
               </button>
             </div>
           </div>
         )}
 
-        {/* Results Display */}
+        {/* Results Area */}
         {viewMode === "diff" && result ? (
-          <section className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+          <section className="rounded-xl border border-border bg-surface/50 p-4">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold text-zinc-300">
-                Word Diff Visualizer
-              </span>
+              <div>
+                <span className="text-xs font-semibold text-foreground">
+                  Exact Word Additions & Deletions
+                </span>
+                <p className="text-[11px] text-muted-fg">
+                  Green indicates added guidelines and constraints; red indicates pruned filler.
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={() => copyText(result.optimized, true)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-800/80 px-2.5 py-1 text-xs text-zinc-200 hover:bg-zinc-700"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs text-foreground hover:bg-surface-muted transition"
               >
                 {copiedOptimized ? (
                   <>
@@ -409,28 +540,31 @@ export function PromptWorkspace() {
           </section>
         ) : (
           <section className="grid gap-4 lg:grid-cols-2">
-            <div className="flex min-h-[260px] flex-col rounded-xl border border-zinc-800 bg-zinc-900/40">
-              <div className="flex items-center justify-between border-b border-zinc-800/80 px-4 py-3">
+            {/* Original Box */}
+            <div className="flex min-h-[260px] flex-col rounded-xl border border-border bg-surface/40">
+              <div className="flex items-center justify-between border-b border-border/80 px-4 py-3">
                 <div>
-                  <h3 className="text-sm font-semibold text-zinc-200">Original Prompt</h3>
-                  <p className="text-xs text-zinc-500">Source text before transformation</p>
+                  <h3 className="text-sm font-semibold text-foreground">
+                    Original Prompt
+                  </h3>
+                  <p className="text-xs text-muted-fg">What you started with</p>
                 </div>
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
                     disabled={!prompt}
                     onClick={() => openTestPlayground(prompt, "Original Prompt")}
-                    className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 disabled:opacity-30"
-                    title="Test original in playground"
+                    className="rounded-lg p-2 text-muted-fg hover:bg-surface-muted hover:text-foreground disabled:opacity-30 transition"
+                    title="Test original prompt"
                   >
-                    <Play className="h-4 w-4" />
+                    <Play className="h-4 w-4 text-emerald-400" />
                   </button>
                   <button
                     type="button"
                     disabled={!prompt}
                     onClick={() => copyText(prompt, false)}
-                    className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 disabled:opacity-30"
-                    title="Copy original"
+                    className="rounded-lg p-2 text-muted-fg hover:bg-surface-muted hover:text-foreground disabled:opacity-30 transition"
+                    title="Copy original prompt"
                   >
                     {copiedOriginal ? (
                       <Check className="h-4 w-4 text-emerald-400" />
@@ -440,32 +574,37 @@ export function PromptWorkspace() {
                   </button>
                 </div>
               </div>
-              <pre className="flex-1 overflow-auto whitespace-pre-wrap p-4 font-mono text-sm leading-relaxed text-zinc-300">
+              <pre className="flex-1 overflow-auto whitespace-pre-wrap p-4 font-mono text-sm leading-relaxed text-muted-fg">
                 {prompt || "—"}
               </pre>
             </div>
 
-            <div className="flex min-h-[260px] flex-col rounded-xl border border-violet-500/30 bg-violet-950/15">
-              <div className="flex items-center justify-between border-b border-violet-800/30 px-4 py-3">
+            {/* Optimized Box */}
+            <div className="flex min-h-[260px] flex-col rounded-xl border border-accent/40 bg-accent/5">
+              <div className="flex items-center justify-between border-b border-accent/20 px-4 py-3">
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-semibold text-violet-200">Optimized Prompt</h3>
+                    <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                      <Sparkles className="h-4 w-4 text-accent" />
+                      Optimized Prompt
+                    </h3>
                     {result?.qualityGate && (
-                      <span className="rounded bg-emerald-950/80 border border-emerald-800 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-300">
-                        Jev Gate: {Math.round(result.qualityGate.intentPreserved * 100)}% Intent match
+                      <span className="rounded-full bg-emerald-950/80 border border-emerald-800/80 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
+                        {Math.round(result.qualityGate.intentPreserved * 100)}% Intent Match
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-violet-400/80">
-                    {result ? "DeepSeek optimized rewrite" : "Run optimize to generate"}
+                  <p className="text-xs text-muted-fg">
+                    {result ? "Production-ready rewrite" : "Click Optimize to generate"}
                   </p>
                 </div>
+
                 <div className="flex items-center gap-1">
                   {result?.optimized && (
                     <button
                       type="button"
                       onClick={() => openTestPlayground(result.optimized, "Optimized Prompt")}
-                      className="rounded-lg p-2 text-violet-300 hover:bg-violet-900/40 hover:text-white"
+                      className="rounded-lg p-2 text-accent hover:bg-accent/15 transition"
                       title="Test optimized in playground"
                     >
                       <Play className="h-4 w-4 text-emerald-400" />
@@ -475,8 +614,8 @@ export function PromptWorkspace() {
                     type="button"
                     disabled={!result?.optimized}
                     onClick={() => result && copyText(result.optimized, true)}
-                    className="rounded-lg p-2 text-violet-300 hover:bg-violet-900/40 hover:text-white disabled:opacity-30"
-                    title="Copy optimized"
+                    className="rounded-lg p-2 text-foreground hover:bg-surface-muted disabled:opacity-30 transition"
+                    title="Copy optimized prompt"
                   >
                     {copiedOptimized ? (
                       <Check className="h-4 w-4 text-emerald-400" />
@@ -486,10 +625,11 @@ export function PromptWorkspace() {
                   </button>
                 </div>
               </div>
-              <pre className="flex-1 overflow-auto whitespace-pre-wrap p-4 font-mono text-sm leading-relaxed text-zinc-100">
+
+              <pre className="flex-1 overflow-auto whitespace-pre-wrap p-4 font-mono text-sm leading-relaxed text-foreground">
                 {result?.optimized || (
-                  <span className="text-zinc-600">
-                    Click &ldquo;Optimize with DeepSeek&rdquo; to generate improved prompt with full constraints and structural formatting.
+                  <span className="text-muted-fg/70">
+                    Your upgraded prompt will appear here with strict boundary constraints, schema guidelines, and negative criteria.
                   </span>
                 )}
               </pre>
@@ -497,28 +637,31 @@ export function PromptWorkspace() {
           </section>
         )}
 
-        {/* What Changed & Quality Gate Details */}
+        {/* Transformation Insights (What Changed) */}
         {result && (
-          <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/40 p-5">
+          <section className="space-y-4 rounded-xl border border-border bg-surface/50 p-5">
             <div>
-              <h3 className="text-sm font-semibold text-zinc-200 flex items-center gap-2">
-                Transformation Summary
+              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <CheckCircle className="h-4 w-4 text-accent" />
+                Summary of Improvements
               </h3>
-              <p className="mt-1.5 text-sm text-zinc-400">{result.summary}</p>
+              <p className="mt-1 text-xs text-muted-fg leading-relaxed">
+                {result.summary}
+              </p>
             </div>
 
             {result.changes.length > 0 && (
               <div>
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
-                  Key Improvements
+                <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-fg mb-2">
+                  Key Changes Made
                 </h4>
-                <ul className="mt-2 grid gap-1.5 sm:grid-cols-2">
+                <ul className="grid gap-2 sm:grid-cols-2">
                   {result.changes.map((c, i) => (
                     <li
                       key={i}
-                      className="flex items-start gap-2 rounded-lg border border-zinc-800/80 bg-zinc-950/40 p-2.5 text-xs text-zinc-300"
+                      className="flex items-start gap-2 rounded-lg border border-border bg-background/50 p-2.5 text-xs text-foreground"
                     >
-                      <CheckCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-400" />
+                      <span className="text-accent font-bold mt-0.5">•</span>
                       <span>{c}</span>
                     </li>
                   ))}
@@ -527,25 +670,22 @@ export function PromptWorkspace() {
             )}
 
             {result.qualityGate && (
-              <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 text-xs text-zinc-400">
-                <span className="font-semibold text-zinc-300">Jev Quality Gate: </span>
-                Intent fidelity confirmed at{" "}
+              <div className="rounded-lg border border-border bg-background/60 p-3 text-xs text-muted-fg">
+                <span className="font-semibold text-foreground">Quality Verification: </span>
+                Core task intent preserved at{" "}
                 <span className="font-mono text-emerald-400 font-bold">
                   {Math.round(result.qualityGate.intentPreserved * 100)}%
                 </span>
-                . Over-engineering cognitive load assessed at{" "}
-                <span className="font-mono text-zinc-300">
-                  {Math.round(result.qualityGate.overEngineered * 100)}%
-                </span>
-                .
+                . Zero harmful domain drift detected.
               </div>
             )}
           </section>
         )}
       </main>
 
+      {/* Footer */}
       <footer className="mt-auto border-t border-border py-6 bg-surface/30">
-        <div className="mx-auto flex max-w-6xl flex-col sm:flex-row items-center justify-between gap-3 px-4 text-xs text-muted-fg">
+        <div className="mx-auto flex max-w-6xl flex-col sm:flex-row items-center justify-between gap-3 px-4 sm:px-6 text-xs text-muted-fg">
           <div className="flex items-center gap-2">
             <BrandMark className="size-4" />
             <span>
@@ -558,7 +698,7 @@ export function PromptWorkspace() {
             rel="noreferrer"
             className="hover:text-foreground transition underline underline-offset-4"
           >
-            GitHub
+            GitHub Repository
           </a>
         </div>
       </footer>

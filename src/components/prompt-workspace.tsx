@@ -18,6 +18,7 @@ import {
   Settings2,
   Sparkles,
   Terminal,
+  Video,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSettings } from "@/lib/settings-context";
@@ -51,8 +52,14 @@ const KINDS: {
   {
     id: "image",
     label: "Image Prompt",
-    tagline: "Visual description for Midjourney, Flux, or Stable Diffusion",
+    tagline: "Visual description for Google Nano Banana, Midjourney, Flux",
     icon: ImageIcon,
+  },
+  {
+    id: "video",
+    label: "Video Prompt",
+    tagline: "Temporal motion & camera path for Veo 3.1, Omni, Kling, Runway",
+    icon: Video,
   },
 ];
 
@@ -308,7 +315,7 @@ export function PromptWorkspace() {
               Click an example to test:
             </span>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
             {PROMPT_EXAMPLES.map((ex, idx) => (
               <button
                 key={idx}
@@ -339,7 +346,7 @@ export function PromptWorkspace() {
             <label className="block text-xs font-semibold uppercase tracking-wider text-muted-fg mb-2">
               Step 1: Choose Prompt Type
             </label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
               {KINDS.map(({ id, label, tagline, icon: Icon }) => (
                 <button
                   key={id}
@@ -374,6 +381,28 @@ export function PromptWorkspace() {
                 </button>
               ))}
             </div>
+
+            {/* Target Chips for Video and Image */}
+            {kind === "video" && (
+              <div className="mt-2.5 flex flex-wrap items-center gap-2 rounded-xl border border-purple-800/40 bg-purple-950/20 px-3.5 py-2 text-xs text-purple-200">
+                <span className="font-semibold text-purple-300">Video Targets:</span>
+                <span className="rounded bg-purple-900/60 border border-purple-700/50 px-2 py-0.5 font-mono text-[10px] text-purple-200">Google Veo 3.1</span>
+                <span className="rounded bg-purple-900/60 border border-purple-700/50 px-2 py-0.5 font-mono text-[10px] text-purple-200">Google Omni</span>
+                <span className="rounded bg-purple-900/60 border border-purple-700/50 px-2 py-0.5 font-mono text-[10px] text-purple-200">Kling 1.5/2.0</span>
+                <span className="rounded bg-purple-900/60 border border-purple-700/50 px-2 py-0.5 font-mono text-[10px] text-purple-200">Runway Gen-3</span>
+                <span className="text-purple-300/80 ml-auto hidden md:inline text-[11px]">Structured tags ([SCENE], [TEMPORAL ACTION], [CAMERA & LIGHTING]) for copy-paste</span>
+              </div>
+            )}
+            {kind === "image" && (
+              <div className="mt-2.5 flex flex-wrap items-center gap-2 rounded-xl border border-sky-800/40 bg-sky-950/20 px-3.5 py-2 text-xs text-sky-200">
+                <span className="font-semibold text-sky-300">Image Targets:</span>
+                <span className="rounded bg-sky-900/60 border border-sky-700/50 px-2 py-0.5 font-mono text-[10px] text-sky-200">Google Nano Banana</span>
+                <span className="rounded bg-sky-900/60 border border-sky-700/50 px-2 py-0.5 font-mono text-[10px] text-sky-200">GPT-1.5 Image</span>
+                <span className="rounded bg-sky-900/60 border border-sky-700/50 px-2 py-0.5 font-mono text-[10px] text-sky-200">Midjourney v6</span>
+                <span className="rounded bg-sky-900/60 border border-sky-700/50 px-2 py-0.5 font-mono text-[10px] text-sky-200">Flux.1</span>
+                <span className="text-sky-300/80 ml-auto hidden md:inline text-[11px]">Rich visual details with composition & lighting</span>
+              </div>
+            )}
           </div>
 
           {/* Text Area */}
@@ -396,7 +425,9 @@ export function PromptWorkspace() {
                     ? "e.g. Write a python script to scrape product prices from an e-commerce website and export to CSV. Make sure to retry on errors and handle missing fields..."
                     : kind === "system"
                     ? "e.g. You are a senior frontend developer reviewing code. Be strict about React 19 patterns, state management, and edge cases. Keep suggestions concise..."
-                    : "e.g. Cinematic photograph of a vintage cafe in Paris at night, rain reflecting street lamps on cobblestone, warm interior lighting, 35mm lens, shallow depth of field..."
+                    : kind === "image"
+                    ? "e.g. Cinematic photograph of a vintage cafe in Paris at night, rain reflecting street lamps on cobblestone, warm interior lighting, 35mm lens, shallow depth of field..."
+                    : "e.g. Veo 3.1 / Kling / Runway: A young man power-sliding a matte black supermoto motorcycle full throttle across cobblestone piazza in Trieste, tire smoke billowing, low-angle tracking camera following rear wheel, crowd reacting..."
                 }
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}

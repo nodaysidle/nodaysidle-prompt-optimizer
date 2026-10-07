@@ -27,20 +27,27 @@
 
 ```mermaid
 flowchart TD
-    A["Raw Prompt Input (User / System / Image)"] --> B["Jev System One Diagnostics (~80ms)"]
+    A["Raw Prompt Input (User / System / Image / Video)"] --> B["Jev System One Diagnostics (~80ms)"]
     
     subgraph Jev_System_One ["System One Probabilistic Rubric"]
         B --> B1["Clarity Rubric (0..3 Score)"]
         B --> B2["Ambiguity Probability (Noul)"]
         B --> B3["Missing Constraints (Noul)"]
-        B --> B4["Missing Persona/Boundary (Noul)"]
-        B --> B5["Jailbreak / Injection Risk (Noul)"]
+        B --> B4["Temporal Motion & Pacing (Noul)"]
+        B --> B5["Camera Movement Choreography (Noul)"]
+        B --> B6["Jailbreak / Injection Risk (Noul)"]
     end
     
     B --> C["Diagnostic Context & Prompt Conditioning"]
     C --> D["DeepSeek Platform Engine (deepseek-chat / deepseek-reasoner)"]
     
     D --> E["Optimized Candidate Prompt"]
+    subgraph Output_Formulation ["Target-Specific Output"]
+        E --> E1["LLM Prompts (Structured Markdown / Role Directives)"]
+        E --> E2["Image Prompts (Natural Visual Density for Nano Banana / Flux)"]
+        E --> E3["Video Prompts ([SCENE], [TEMPORAL ACTION], [CAMERA & LIGHTING] for Veo 3.1 / Kling / Runway)"]
+    end
+    
     E --> F["Jev Quality Gate"]
     F -->|Intent Preserved? Overengineered?| G["Comparison Workspace"]
     
@@ -57,12 +64,14 @@ flowchart TD
 
 | Feature | Description | Engine / Mechanism |
 |---|---|---|
-| **System One Rubric Linter** | Sub-100ms probabilistic evaluation of prompt clarity, ambiguity, missing negative constraints, and injection risks. | TypeSafe Jev (`Score`, `Noul`, `Choice`) |
+| **System One Rubric Linter** | Sub-100ms probabilistic evaluation of prompt clarity, ambiguity, missing negative constraints, temporal motion dynamics, and camera choreography. | TypeSafe Jev (`Score`, `Noul`, `Choice`) |
+| **Video Generation Optimization** | Dedicated pipeline for **Google Veo 3.1, Google Omni, Kling, and Runway**. Generates structured plain-text tags (`[SCENE]`, `[TEMPORAL ACTION]`, `[CAMERA & LIGHTING]`) with second-by-second action progression. | DeepSeek Flash + Jev Temporal Audit |
+| **Image Generation Optimization** | Visual composition, lighting, camera, and aspect ratio engineering for **Google Nano Banana, GPT-1.5 Image, Midjourney, and Flux.1**. | DeepSeek Flash |
 | **Diagnostic-Conditioned Rewriting** | Feeds specific diagnosed flaws directly into the rewriter to eliminate generic boilerplate and resolve exact prompt shortcomings. | DeepSeek Platform API (`deepseek-chat`) |
 | **Quality & Regression Gate** | Evaluates candidate rewrites against originals to verify that core intent is preserved without cognitive bloat. | TypeSafe Jev Verification Cascade |
 | **Word-Level Diff Visualizer** | Interactive additions (green highlight) and removals (red strike-through) with token/word delta counters. | `diff` word tokenization |
 | **Live Prompt Playground** | Execute original and optimized prompts against sample inputs in an in-app drawer to verify real outputs. | Server Edge Route `/api/test-run` |
-| **1-Click Preset Templates** | Instant templates for SQL assistance, code review personas, support concierges, and visual diffusion prompts. | Prebuilt examples library |
+| **1-Click Preset Templates** | Instant templates for Veo 3.1 Supermoto drift, Kling FPV chase, SQL queries, code review personas, and visual diffusion prompts. | Prebuilt examples library |
 | **Zero-CORS & Secure Auth** | Direct server-side Next.js route handlers (`/api/optimize`, `/api/diagnose`, `/api/test-run`). No leaked secrets in client bundles. | Next.js App Router Edge Handlers |
 
 ---

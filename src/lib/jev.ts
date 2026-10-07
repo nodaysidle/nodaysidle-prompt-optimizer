@@ -65,8 +65,15 @@ export async function runJevDiagnostics(
             {
               user: "Direct user question, query, or task",
               system: "System instructions or behavioral persona rules",
-              image: "Visual, diffusion, or image generation prompt",
+              image: "Visual still image generation prompt",
+              video: "Video or motion generation prompt (Veo 3.1, Kling, Runway, Omni)",
             },
+          ),
+          lacks_temporal_action: noul(
+            "Does `prompt` lack temporal progression, movement over time, or dynamic action (reads like a static still photo instead of dynamic video)?",
+          ),
+          lacks_camera_movement: noul(
+            "Does `prompt` fail to describe camera choreography, lens motion, tracking, pan, or cinematographic angles?",
           ),
         },
       });
@@ -102,6 +109,16 @@ export async function runJevDiagnostics(
           ? (answers.suggested_kind.choice as PromptKind)
           : undefined;
 
+      const lacksTemporalAction =
+        answers.lacks_temporal_action && "noul" in answers.lacks_temporal_action
+          ? answers.lacks_temporal_action.noul
+          : 0.5;
+
+      const lacksCameraMovement =
+        answers.lacks_camera_movement && "noul" in answers.lacks_camera_movement
+          ? answers.lacks_camera_movement.noul
+          : 0.5;
+
       const issues: string[] = [];
       const strengths: string[] = [];
 
@@ -109,6 +126,13 @@ export async function runJevDiagnostics(
       if (lacksConstraints > 0.6) issues.push("Missing output format or negative constraints");
       if (lacksRole > 0.65) issues.push("No defined persona or system boundary");
       if (injectionRisk > 0.5) issues.push("Potential prompt injection pattern detected");
+
+      if (params.kind === "video" || suggestedKindChoice === "video") {
+        if (lacksTemporalAction > 0.6) issues.push("Lacks temporal progression or pacing over time");
+        if (lacksCameraMovement > 0.6) issues.push("Missing camera movement choreography (pan, tracking, dolly)");
+        if (lacksTemporalAction < 0.35) strengths.push("Strong motion dynamics & temporal progression");
+        if (lacksCameraMovement < 0.35) strengths.push("Explicit camera path & cinematographic movement");
+      }
 
       if (clarityScore >= 2) strengths.push("Actionable directives");
       if (isAmbiguous < 0.3) strengths.push("Specific and well-scoped");
@@ -121,6 +145,8 @@ export async function runJevDiagnostics(
         lacksConstraints,
         lacksRole,
         injectionRisk,
+        lacksTemporalAction,
+        lacksCameraMovement,
         suggestedKind: suggestedKindChoice,
         issues,
         strengths,
@@ -131,7 +157,7 @@ export async function runJevDiagnostics(
   }
 
   // Fallback heuristic diagnostics when Jev key is not configured or offline
-  return runHeuristicDiagnostics(params.prompt);
+  return runHeuristicDiagnostics(params.prompt, params.kind);
 }
 
 /**
@@ -188,7 +214,7 @@ export async function runJevQualityGate(
 /**
  * Fast deterministic fallback when Jev is not connected.
  */
-function runHeuristicDiagnostics(text: string): DiagnosticResult {
+function runHeuristicDiagnostics(text: string, kind?: PromptKind): DiagnosticResult {
   const len = text.trim().length;
   const words = text.trim().split(/\s+/).length;
 
@@ -196,6 +222,10 @@ function runHeuristicDiagnostics(text: string): DiagnosticResult {
   const hasRole = /you are|act as|role:|persona|expert/i.test(text);
   const isVague = words < 12 || /something|help me with|do whatever/i.test(text);
   const injection = /ignore previous|disregard|system prompt|jailbreak/i.test(text);
+
+  const hasCameraMotion = /camera|tracking|dolly|pan|tilt|zoom|crane|fpv|steadicam|orbit|aerial|gimbal|slow motion|motion blur/i.test(text);
+  const hasTemporalAction = /drifting|accelerat|running|jumping|moving|racing|walking|speed|billowing|flowing|flying|explosion|spinning|smoke|particles|seconds|\b[0-9]+s\b/i.test(text);
+  const isVideoHint = /veo|kling|runway|omni|video|fps|frame rate|timelapse|slow motion|camera path/i.test(text);
 
   let clarityScore = 1;
   if (words > 40 && hasConstraints) clarityScore = 3;
@@ -210,16 +240,41 @@ function runHeuristicDiagnostics(text: string): DiagnosticResult {
   if (!hasRole && len > 30) issues.push("No explicit persona/role assigned");
   if (injection) issues.push("Potential injection syntax detected");
 
+  let suggestedKind: PromptKind = kind || "user";
+  if (!kind) {
+    if (isVideoHint || (hasCameraMotion && hasTemporalAction)) {
+      suggestedKind = "video";
+    } else if (hasRole || /system instructions|operational parameters/i.test(text)) {
+      suggestedKind = "system";
+    } else if (/photorealistic|4k|octane|unreal engine|cinematic|portrait|lens|bokeh/i.test(text)) {
+      suggestedKind = "image";
+    }
+  }
+
+  // Video-specific diagnostic evaluation
+  let lacksTemporalAction = 0.5;
+  let lacksCameraMovement = 0.5;
+
+  if (suggestedKind === "video") {
+    lacksTemporalAction = hasTemporalAction ? 0.2 : 0.85;
+    lacksCameraMovement = hasCameraMotion ? 0.2 : 0.85;
+
+    if (!hasTemporalAction) {
+      issues.push("Lacks temporal progression or pacing over time");
+    } else {
+      strengths.push("Dynamic motion and physical progression described");
+    }
+
+    if (!hasCameraMotion) {
+      issues.push("Missing camera movement choreography (e.g. tracking, pan, dolly)");
+    } else {
+      strengths.push("Explicit camera motion path specified");
+    }
+  }
+
   if (hasConstraints) strengths.push("Contains format/boundary instructions");
   if (hasRole) strengths.push("Clear persona established");
   if (words >= 15 && !isVague) strengths.push("Sufficient context provided");
-
-  let suggestedKind: PromptKind = "user";
-  if (hasRole || /system instructions|operational parameters/i.test(text)) {
-    suggestedKind = "system";
-  } else if (/photorealistic|4k|octane|unreal engine|cinematic|portrait|lens|bokeh/i.test(text)) {
-    suggestedKind = "image";
-  }
 
   return {
     clarityScore,
@@ -228,6 +283,8 @@ function runHeuristicDiagnostics(text: string): DiagnosticResult {
     lacksConstraints: hasConstraints ? 0.2 : 0.85,
     lacksRole: hasRole ? 0.15 : 0.75,
     injectionRisk: injection ? 0.9 : 0.05,
+    lacksTemporalAction,
+    lacksCameraMovement,
     suggestedKind,
     issues,
     strengths,

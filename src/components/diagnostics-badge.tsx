@@ -24,6 +24,13 @@ export function calculatePromptHealth(diagnostics: DiagnosticResult): {
   const rolePart = (1 - diagnostics.lacksRole) * 10;
 
   let total = Math.round(clarityPart + constraintsPart + ambiguityPart + rolePart);
+
+  if (diagnostics.suggestedKind === "video" && diagnostics.lacksCameraMovement !== undefined) {
+    // Factor in video motion dynamics
+    const videoDynamics = ((1 - (diagnostics.lacksTemporalAction ?? 0.5)) + (1 - (diagnostics.lacksCameraMovement ?? 0.5))) * 15;
+    total = Math.round((total * 0.7) + videoDynamics);
+  }
+
   if (diagnostics.injectionRisk > 0.5) total = Math.max(10, total - 25);
   total = Math.max(10, Math.min(100, total));
 
@@ -201,23 +208,39 @@ export function DiagnosticsPanel({
               </p>
             </div>
 
-            {/* Persona */}
+            {/* Persona or Camera Motion */}
             <div className="rounded-lg border border-border/80 bg-background/50 p-2.5">
-              <span className="text-[11px] text-muted-fg block">AI Persona</span>
+              <span className="text-[11px] text-muted-fg block">
+                {diagnostics.suggestedKind === "video" ? "Camera & Motion" : "AI Persona"}
+              </span>
               <div className="mt-1 flex items-baseline gap-1.5">
                 <span
                   className={cn(
                     "text-base font-bold font-mono",
-                    diagnostics.lacksRole < 0.4
+                    diagnostics.suggestedKind === "video"
+                      ? (diagnostics.lacksCameraMovement ?? 1) < 0.4
+                        ? "text-emerald-400"
+                        : "text-amber-400"
+                      : diagnostics.lacksRole < 0.4
                       ? "text-emerald-400"
                       : "text-muted-fg",
                   )}
                 >
-                  {diagnostics.lacksRole < 0.4 ? "Assigned" : "None"}
+                  {diagnostics.suggestedKind === "video"
+                    ? (diagnostics.lacksCameraMovement ?? 1) < 0.4
+                      ? "Directed"
+                      : "Static"
+                    : diagnostics.lacksRole < 0.4
+                    ? "Assigned"
+                    : "None"}
                 </span>
               </div>
               <p className="mt-0.5 text-[10px] text-muted-fg/80">
-                {diagnostics.lacksRole < 0.4
+                {diagnostics.suggestedKind === "video"
+                  ? (diagnostics.lacksCameraMovement ?? 1) < 0.4
+                    ? "Camera path defined"
+                    : "Needs movement cues"
+                  : diagnostics.lacksRole < 0.4
                   ? "Expert context provided"
                   : "Generic voice"}
               </p>

@@ -3,7 +3,16 @@ import type { DiagnosticResult, PromptKind } from "./types";
 const KIND_GUIDANCE: Record<PromptKind, string> = {
   user: `This is a USER prompt (the task or question sent to an LLM). Improve clarity, specificity, step-by-step reasoning triggers, structural boundaries, and explicit negative constraints. Preserve the user's intent. Add missing context placeholders using [brackets].`,
   system: `This is a SYSTEM prompt (governing instructions for an LLM persona). Improve role definition, boundary enforcement, output formatting schema (e.g. JSON/markdown), safety rules, and anti-hallucination guardrails. Keep it actionable and unambiguous.`,
-  image: `This is an IMAGE GENERATION prompt (for Midjourney, Flux, Stable Diffusion). Improve subject details, composition, lighting, style/medium, camera/lens cues, color palette, and aspect ratio recommendations. Use concise, evocative visual language.`,
+  image: `This is an IMAGE GENERATION prompt (for Google Nano Banana, GPT-1.5 Image, Midjourney, Flux, Stable Diffusion). Improve subject details, composition, lighting, style/medium, camera/lens cues, color palette, and aspect ratio recommendations. Provide a rich, cohesive visual description without raw JSON dictionaries so the user can directly copy-paste it into image generators.`,
+  video: `This is a VIDEO GENERATION prompt specifically engineered for premier video foundation models: Google Veo 3.1, Google Omni, Kling (1.5/2.0), and Runway (Gen-3 Alpha).
+Video models need temporal pacing, subject action over time, camera trajectory/kinetics, physics/secondary motion, and lighting evolution across duration.
+CRITICAL FORMATTING INSTRUCTIONS FOR VIDEO:
+Do NOT output a JSON dictionary in the prompt. Output a clean, high-density structured plain-text prompt using standard video prompt tags:
+- [SCENE & SUBJECT]: Subject visual appearance, attire/materials, starting pose, environment architecture, spatial atmosphere.
+- [TEMPORAL ACTION & DYNAMICS]: Second-by-second action progression (0-2s start, 2-5s climax, 5-8s resolution), speed changes, contact mechanics, and secondary physics (tire smoke, dust particles, water spray, cloth/hair simulation).
+- [CAMERA PATH & CINEMATOGRAPHY]: Precise lens movement (low-angle tracking, orbital pan, crane push-in, FPV chase, gimbal sweep), focal length (e.g. 24mm anamorphic), shutter speed/motion blur, framing, and depth of field.
+- [LIGHTING & ATMOSPHERE]: Sun position, atmospheric haze, color grading, shadows, volumetric god rays, reflections.
+- [NEGATIVE / ARTIFACT GUARDS]: Exclude static pauses, unnatural body morphing, jitter, rubbery limbs, sudden camera snapping, synthetic over-smoothing.`,
 };
 
 export function buildOptimizerMessages(

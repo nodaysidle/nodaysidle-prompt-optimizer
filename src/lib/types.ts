@@ -1,4 +1,4 @@
-export type PromptKind = "user" | "system" | "image";
+export type PromptKind = "user" | "system" | "image" | "video";
 
 export interface DiagnosticResult {
   clarityScore: number; // 0 to 3
@@ -7,6 +7,8 @@ export interface DiagnosticResult {
   lacksConstraints: number; // 0..1 probability
   lacksRole: number; // 0..1 probability
   injectionRisk: number; // 0..1 probability
+  lacksTemporalAction?: number; // 0..1 probability (video prompts)
+  lacksCameraMovement?: number; // 0..1 probability (video prompts)
   suggestedKind?: PromptKind;
   issues: string[];
   strengths: string[];

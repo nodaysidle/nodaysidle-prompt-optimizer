@@ -1,36 +1,47 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Prompt Optimizer
 
-## Getting Started
+A high-performance prompt engineering workbench powered by **DeepSeek Platform API** and **TypeSafe Jev System One Diagnostics**.
 
-First, run the development server:
+Paste any user prompt, system instructions, or image-generation prompt to get instant diagnostic linting, production-grade rewrites, side-by-side and word-level diff comparisons, and live test runs.
+
+## Features
+
+- **DeepSeek Platform Engine**: Blazing fast rewrites using official DeepSeek Platform API (`deepseek-chat` / DeepSeek-V3 and `deepseek-reasoner` / DeepSeek-R1).
+- **TypeSafe Jev System One Diagnostics**: Sub-100ms probabilistic rubric analysis evaluating:
+  - Clarity Score (0 to 3 scale)
+  - Ambiguity & scope vagueness
+  - Missing boundary & output formatting constraints
+  - Persona & operational context gaps
+  - Jailbreak / prompt injection risk flags
+- **Diagnostic-Conditioned Rewriting**: Feeds detected flaws directly into the rewriter to produce targeted, high-fidelity prompts.
+- **Jev Quality & Regression Gate**: Verifies intent preservation and guards against over-engineered cognitive bloat.
+- **Interactive Word Diff**: Highlights exact word additions and deletions.
+- **Prompt Playground**: Test prompts live against DeepSeek with sample inputs without leaving the app.
+- **1-Click Examples**: Pre-built templates for database tasks, code review personas, support concierges, and visual prompts.
+- **Zero CORS / Privacy First**: Direct browser-to-server edge route handlers. API keys can be saved locally in browser `localStorage` or configured server-side on Vercel without exposing them to the client bundle.
+
+## Configuration & Keys
+
+### 1. In the App (Client-side localStorage)
+Click **Settings** in the top navigation:
+- Enter your **DeepSeek API Key** ([platform.deepseek.com](https://platform.deepseek.com)).
+- *(Optional)* Enter your **TypeSafe Jev API Key** ([typesafe.ai](https://typesafe.ai)) for live System One probabilistic scoring. If omitted, built-in deterministic heuristics are used.
+
+### 2. On Vercel / Server Environment
+To provide keys globally for your deployment without requiring visitors to enter their own:
+Set `DEEPSEEK_API_KEY` and `TYPESAFE_API_KEY` in **Vercel Project Settings → Environment Variables**.
+
+## Develop Locally
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Build
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npm run build
+```

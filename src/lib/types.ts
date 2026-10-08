@@ -14,6 +14,15 @@ export interface DiagnosticResult {
   strengths: string[];
 }
 
+export type EngineTarget =
+  | "universal"
+  | "midjourney"
+  | "flux"
+  | "sd"
+  | "veo"
+  | "kling"
+  | "runway";
+
 export interface QualityGateResult {
   intentPreserved: number; // 0..1
   overEngineered: number; // 0..1
@@ -22,10 +31,23 @@ export interface QualityGateResult {
 
 export interface OptimizationResult {
   optimized: string;
+  negativePrompt?: string;
   summary: string;
   changes: string[];
   diagnostics?: DiagnosticResult;
   qualityGate?: QualityGateResult;
+}
+
+export interface PromptHistoryItem {
+  id: string;
+  createdAt: number;
+  original: string;
+  optimized: string;
+  negativePrompt?: string;
+  kind: PromptKind;
+  engineTarget?: EngineTarget;
+  summary: string;
+  isFavorite: boolean;
 }
 
 export interface AppSettings {

@@ -5,15 +5,16 @@ import {
   isOnlySubjectPrompt,
   isSubjectInPhotoPrompt,
 } from "@/lib/optimizer-prompt";
-import type { DiagnosticResult, PromptKind } from "@/lib/types";
+import type { DiagnosticResult, EngineTarget, PromptKind } from "@/lib/types";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { prompt, kind, model, existingDiagnostics } = body as {
+    const { prompt, kind, model, engineTarget, existingDiagnostics } = body as {
       prompt: string;
       kind: PromptKind;
       model?: string;
+      engineTarget?: EngineTarget;
       existingDiagnostics?: DiagnosticResult;
     };
 
@@ -32,6 +33,8 @@ export async function POST(req: NextRequest) {
     if (isImageOrVideo && isSubjectInPhotoPrompt(trimmedPrompt) && isOnlySubjectPrompt(trimmedPrompt)) {
       return NextResponse.json({
         optimized: IDENTITY_LOCK_OUTPUT,
+        negativePrompt:
+          "identity mismatch, facial morphing, different person, distorted features, bad likeness",
         summary:
           "Applied reference photo identity lock rule: exact likeness and facial geometry locked to attached reference photo.",
         changes: [
@@ -63,7 +66,8 @@ export async function POST(req: NextRequest) {
 
     const result = await optimizePrompt({
       prompt: prompt.trim(),
-      kind: kind || "user",
+      kind: effectiveKind,
+      engineTarget,
       deepseekApiKey: deepseekKey,
       deepseekModel: model || "deepseek-chat",
       typesafeApiKey: typesafeKey,

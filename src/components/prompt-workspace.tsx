@@ -3,11 +3,13 @@
 import {
   AlertCircle,
   ArrowRight,
+  Camera,
   Check,
   CheckCircle,
   Copy,
   Eye,
   GitCompare,
+  History,
   ImageIcon,
   KeyRound,
   Lightbulb,
@@ -15,6 +17,7 @@ import {
   MessageSquare,
   Play,
   RotateCcw,
+  Scale,
   Settings2,
   Sparkles,
   Terminal,
@@ -22,15 +25,23 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSettings } from "@/lib/settings-context";
-import type { DiagnosticResult, OptimizationResult, PromptKind } from "@/lib/types";
+import type {
+  DiagnosticResult,
+  EngineTarget,
+  OptimizationResult,
+  PromptHistoryItem,
+  PromptKind,
+} from "@/lib/types";
 import { PROMPT_EXAMPLES, PromptExample } from "@/lib/examples";
 import { cn } from "@/lib/cn";
 import { isSubjectInPhotoPrompt } from "@/lib/optimizer-prompt";
+import { loadHistory, saveHistoryItem } from "@/lib/storage";
 import { SettingsPanel } from "./settings-panel";
 import { DiffViewer } from "./diff-viewer";
 import { DiagnosticsPanel } from "./diagnostics-badge";
 import { TestModal } from "./test-modal";
 import { BrandMark } from "./brand-mark";
+import { HistoryDrawer } from "./history-drawer";
 
 const KINDS: {
   id: PromptKind;
@@ -68,6 +79,7 @@ export function PromptWorkspace() {
   const { settings } = useSettings();
   const [prompt, setPrompt] = useState("");
   const [kind, setKind] = useState<PromptKind>("user");
+  const [engineTarget, setEngineTarget] = useState<EngineTarget>("universal");
   const [loading, setLoading] = useState(false);
   const [diagnosing, setDiagnosing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +87,15 @@ export function PromptWorkspace() {
   const [diagnostics, setDiagnostics] = useState<DiagnosticResult | null>(null);
   const [viewMode, setViewMode] = useState<"split" | "diff">("split");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyItems, setHistoryItems] = useState<PromptHistoryItem[]>(() =>
+    typeof window !== "undefined" ? loadHistory() : [],
+  );
+
+  const refreshHistory = useCallback(() => {
+    setHistoryItems(loadHistory());
+  }, []);
+
   const [testModalState, setTestModalState] = useState<{
     open: boolean;
     prompt: string;
@@ -86,6 +107,7 @@ export function PromptWorkspace() {
   });
   const [copiedOriginal, setCopiedOriginal] = useState(false);
   const [copiedOptimized, setCopiedOptimized] = useState(false);
+  const [copiedNegative, setCopiedNegative] = useState(false);
 
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -157,6 +179,7 @@ export function PromptWorkspace() {
         body: JSON.stringify({
           prompt: trimmed,
           kind,
+          engineTarget,
           model: settings.deepseekModel,
           existingDiagnostics: diagnostics,
         }),
@@ -167,10 +190,22 @@ export function PromptWorkspace() {
         throw new Error(data.error || "Optimization failed.");
       }
 
-      setResult(data as OptimizationResult);
+      const optResult = data as OptimizationResult;
+      setResult(optResult);
       if (data.diagnostics) {
         setDiagnostics(data.diagnostics);
       }
+
+      // Save to local history
+      saveHistoryItem({
+        original: trimmed,
+        optimized: optResult.optimized,
+        negativePrompt: optResult.negativePrompt,
+        kind,
+        engineTarget,
+        summary: optResult.summary,
+      });
+      refreshHistory();
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Optimization failed.";
       setError(msg);
@@ -182,17 +217,70 @@ export function PromptWorkspace() {
     }
   }
 
+  function handleKindChange(newKind: PromptKind) {
+    setKind(newKind);
+    setEngineTarget("universal");
+  }
+
+  function handleInsertIdentityLock() {
+    if (kind !== "image" && kind !== "video") {
+      setKind("image");
+    }
+    const prefix = "The subject in the photo... ";
+    if (!prompt.trim().toLowerCase().startsWith("the subject in the photo")) {
+      setPrompt((prev) => (prev ? `${prefix}${prev}` : prefix));
+    }
+  }
+
+  function applyPreset(type: "ratio" | "lens", value: string) {
+    if (type === "ratio") {
+      if (engineTarget === "midjourney") {
+        setPrompt((prev) => {
+          const stripped = prev.replace(/--ar\s+[0-9]+:[0-9]+/gi, "").trim();
+          return `${stripped} --ar ${value}`.trim();
+        });
+      } else {
+        setPrompt((prev) => {
+          if (prev.toLowerCase().includes(value.toLowerCase())) return prev;
+          return `${prev.trim()}, aspect ratio ${value}`.trim();
+        });
+      }
+    } else if (type === "lens") {
+      setPrompt((prev) => {
+        if (prev.toLowerCase().includes(value.toLowerCase())) return prev;
+        return `${prev.trim()}, shot on ${value} lens`.trim();
+      });
+    }
+  }
+
+  function handleSelectHistoryItem(item: PromptHistoryItem) {
+    setPrompt(item.original);
+    setKind(item.kind);
+    if (item.engineTarget) setEngineTarget(item.engineTarget);
+    setResult({
+      optimized: item.optimized,
+      negativePrompt: item.negativePrompt,
+      summary: item.summary,
+      changes: [],
+    });
+    setHistoryOpen(false);
+  }
+
   function loadExample(example: PromptExample) {
     setPrompt(example.prompt);
     setKind(example.kind);
+    setEngineTarget("universal");
     setResult(null);
     setError(null);
     fetchDiagnostics(example.prompt, example.kind);
   }
 
-  async function copyText(text: string, isOpt: boolean) {
+  async function copyText(text: string, isOpt: boolean, isNeg = false) {
     await navigator.clipboard.writeText(text);
-    if (isOpt) {
+    if (isNeg) {
+      setCopiedNegative(true);
+      setTimeout(() => setCopiedNegative(false), 2000);
+    } else if (isOpt) {
       setCopiedOptimized(true);
       setTimeout(() => setCopiedOptimized(false), 2000);
     } else {
@@ -236,9 +324,18 @@ export function PromptWorkspace() {
           <div className="flex items-center gap-2">
             <button
               type="button"
+              onClick={() => setHistoryOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-foreground hover:border-accent transition cursor-pointer"
+            >
+              <History className="h-3.5 w-3.5 text-muted-fg" />
+              <span className="hidden sm:inline">History & Saved</span>
+              <span className="sm:hidden">History</span>
+            </button>
+            <button
+              type="button"
               onClick={() => setSettingsOpen(true)}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition",
+                "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition cursor-pointer",
                 settings.deepseekApiKey
                   ? "border-border bg-surface text-foreground hover:border-accent"
                   : "border-amber-600/70 bg-amber-950/40 text-amber-200 hover:border-amber-500",
@@ -352,9 +449,9 @@ export function PromptWorkspace() {
                 <button
                   key={id}
                   type="button"
-                  onClick={() => setKind(id)}
+                  onClick={() => handleKindChange(id)}
                   className={cn(
-                    "flex flex-col items-start rounded-xl border p-3 text-left transition",
+                    "flex flex-col items-start rounded-xl border p-3 text-left transition cursor-pointer",
                     kind === id
                       ? "border-accent bg-accent/10 shadow-sm"
                       : "border-border bg-surface/50 text-muted-fg hover:border-border/80 hover:bg-surface-muted",
@@ -383,25 +480,116 @@ export function PromptWorkspace() {
               ))}
             </div>
 
-            {/* Target Chips for Video and Image */}
+            {/* Target Engine Profile Chips for Video and Image */}
             {kind === "video" && (
               <div className="mt-2.5 flex flex-wrap items-center gap-2 rounded-xl border border-purple-800/40 bg-purple-950/20 px-3.5 py-2 text-xs text-purple-200">
-                <span className="font-semibold text-purple-300">Video Targets:</span>
-                <span className="rounded bg-purple-900/60 border border-purple-700/50 px-2 py-0.5 font-mono text-[10px] text-purple-200">Google Veo 3.1</span>
-                <span className="rounded bg-purple-900/60 border border-purple-700/50 px-2 py-0.5 font-mono text-[10px] text-purple-200">Google Omni</span>
-                <span className="rounded bg-purple-900/60 border border-purple-700/50 px-2 py-0.5 font-mono text-[10px] text-purple-200">Kling 1.5/2.0</span>
-                <span className="rounded bg-purple-900/60 border border-purple-700/50 px-2 py-0.5 font-mono text-[10px] text-purple-200">Runway Gen-3</span>
-                <span className="text-purple-300/80 ml-auto hidden md:inline text-[11px]">Structured tags ([SCENE], [TEMPORAL ACTION], [CAMERA & LIGHTING]) for copy-paste</span>
+                <span className="font-semibold text-purple-300">Target Engine:</span>
+                {[
+                  { id: "universal", label: "Universal Video" },
+                  { id: "veo", label: "Google Veo 3.1" },
+                  { id: "kling", label: "Kling 1.5/2.0" },
+                  { id: "runway", label: "Runway Gen-3" },
+                ].map((eng) => (
+                  <button
+                    key={eng.id}
+                    type="button"
+                    onClick={() => setEngineTarget(eng.id as EngineTarget)}
+                    className={cn(
+                      "rounded px-2.5 py-0.5 font-mono text-[10px] transition cursor-pointer",
+                      engineTarget === eng.id
+                        ? "bg-purple-400 text-purple-950 font-bold shadow-xs ring-1 ring-purple-300"
+                        : "bg-purple-900/60 border border-purple-700/50 text-purple-200 hover:bg-purple-800/70",
+                    )}
+                  >
+                    {eng.label}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={handleInsertIdentityLock}
+                  className="ml-auto inline-flex items-center gap-1 rounded-md border border-emerald-500/40 bg-emerald-950/60 px-2 py-0.5 text-[10px] font-semibold text-emerald-300 hover:bg-emerald-900/70 transition cursor-pointer"
+                  title="Insert 'The subject in the photo...' reference lock"
+                >
+                  <Sparkles className="h-3 w-3 text-emerald-400" />
+                  + Reference Photo Lock
+                </button>
               </div>
             )}
             {kind === "image" && (
               <div className="mt-2.5 flex flex-wrap items-center gap-2 rounded-xl border border-sky-800/40 bg-sky-950/20 px-3.5 py-2 text-xs text-sky-200">
-                <span className="font-semibold text-sky-300">Image Targets:</span>
-                <span className="rounded bg-sky-900/60 border border-sky-700/50 px-2 py-0.5 font-mono text-[10px] text-sky-200">Google Nano Banana</span>
-                <span className="rounded bg-sky-900/60 border border-sky-700/50 px-2 py-0.5 font-mono text-[10px] text-sky-200">GPT-1.5 Image</span>
-                <span className="rounded bg-sky-900/60 border border-sky-700/50 px-2 py-0.5 font-mono text-[10px] text-sky-200">Midjourney v6</span>
-                <span className="rounded bg-sky-900/60 border border-sky-700/50 px-2 py-0.5 font-mono text-[10px] text-sky-200">Flux.1</span>
-                <span className="text-sky-300/80 ml-auto hidden md:inline text-[11px]">Rich visual details with composition & lighting</span>
+                <span className="font-semibold text-sky-300">Target Engine:</span>
+                {[
+                  { id: "universal", label: "Universal Image" },
+                  { id: "midjourney", label: "Midjourney v6.1" },
+                  { id: "flux", label: "Flux.1" },
+                  { id: "sd", label: "Stable Diffusion" },
+                ].map((eng) => (
+                  <button
+                    key={eng.id}
+                    type="button"
+                    onClick={() => setEngineTarget(eng.id as EngineTarget)}
+                    className={cn(
+                      "rounded px-2.5 py-0.5 font-mono text-[10px] transition cursor-pointer",
+                      engineTarget === eng.id
+                        ? "bg-sky-400 text-sky-950 font-bold shadow-xs ring-1 ring-sky-300"
+                        : "bg-sky-900/60 border border-sky-700/50 text-sky-200 hover:bg-sky-800/70",
+                    )}
+                  >
+                    {eng.label}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={handleInsertIdentityLock}
+                  className="ml-auto inline-flex items-center gap-1 rounded-md border border-emerald-500/40 bg-emerald-950/60 px-2 py-0.5 text-[10px] font-semibold text-emerald-300 hover:bg-emerald-900/70 transition cursor-pointer"
+                  title="Insert 'The subject in the photo...' reference lock"
+                >
+                  <Sparkles className="h-3 w-3 text-emerald-400" />
+                  + Reference Photo Lock
+                </button>
+              </div>
+            )}
+
+            {/* Aspect Ratio & Lens Presets Toolbar */}
+            {(kind === "image" || kind === "video") && (
+              <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface/40 px-3 py-2 text-xs">
+                <div className="flex items-center gap-1 text-[11px] font-medium text-muted-fg mr-1">
+                  <Scale className="h-3.5 w-3.5 text-accent" />
+                  <span className="font-semibold">Aspect Ratio:</span>
+                </div>
+                {["16:9", "9:16", "1:1", "2.39:1", "4:5"].map((ratio) => (
+                  <button
+                    key={ratio}
+                    type="button"
+                    onClick={() => applyPreset("ratio", ratio)}
+                    className="rounded-md border border-border/80 bg-surface px-2 py-0.5 font-mono text-[10px] text-foreground hover:border-accent hover:text-accent transition cursor-pointer"
+                    title={`Add aspect ratio ${ratio}`}
+                  >
+                    {ratio}
+                  </button>
+                ))}
+
+                <div className="ml-2 hidden sm:flex items-center gap-1 text-[11px] font-medium text-muted-fg mr-1 border-l border-border/60 pl-3">
+                  <Camera className="h-3.5 w-3.5 text-accent" />
+                  <span className="font-semibold">Optics:</span>
+                </div>
+                {[
+                  "35mm Street",
+                  "85mm Portrait",
+                  "24mm Anamorphic",
+                  "FPV Low-Angle",
+                  "Macro 100mm",
+                ].map((lens) => (
+                  <button
+                    key={lens}
+                    type="button"
+                    onClick={() => applyPreset("lens", lens)}
+                    className="hidden sm:inline-block rounded-md border border-border/80 bg-surface px-2 py-0.5 font-mono text-[10px] text-foreground hover:border-accent hover:text-accent transition cursor-pointer"
+                    title={`Add lens ${lens}`}
+                  >
+                    {lens}
+                  </button>
+                ))}
               </div>
             )}
 
@@ -678,6 +866,45 @@ export function PromptWorkspace() {
           </section>
         )}
 
+        {/* Dedicated Negative Prompt Output Box */}
+        {result?.negativePrompt && (
+          <section className="rounded-xl border border-rose-500/30 bg-rose-950/15 p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 text-rose-400 shrink-0" />
+                <div>
+                  <h4 className="text-xs font-semibold text-rose-200">
+                    Negative Prompt (Artifacts, Morphing & Distortion Guards)
+                  </h4>
+                  <p className="text-[11px] text-rose-300/70">
+                    Use in negative prompt inputs (Midjourney --no, Flux, Veo, Kling, or WebUI)
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => copyText(result.negativePrompt!, false, true)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500/40 bg-rose-900/40 px-3 py-1.5 text-xs font-medium text-rose-200 hover:bg-rose-900/70 transition cursor-pointer"
+              >
+                {copiedNegative ? (
+                  <>
+                    <Check className="h-3.5 w-3.5 text-emerald-400" />
+                    Copied Negative
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-3.5 w-3.5" />
+                    Copy Negative
+                  </>
+                )}
+              </button>
+            </div>
+            <pre className="overflow-auto whitespace-pre-wrap rounded-lg bg-background/60 p-3 font-mono text-xs leading-relaxed text-rose-100/90">
+              {result.negativePrompt}
+            </pre>
+          </section>
+        )}
+
         {/* Transformation Insights (What Changed) */}
         {result && (
           <section className="space-y-4 rounded-xl border border-border bg-surface/50 p-5">
@@ -745,6 +972,14 @@ export function PromptWorkspace() {
       </footer>
 
       <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+
+      <HistoryDrawer
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        items={historyItems}
+        onSelectPrompt={handleSelectHistoryItem}
+        onRefreshHistory={refreshHistory}
+      />
 
       <TestModal
         open={testModalState.open}

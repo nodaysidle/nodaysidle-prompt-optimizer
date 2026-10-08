@@ -6,13 +6,14 @@ import {
   isSubjectInPhotoPrompt,
   parseOptimizationResponse,
 } from "../optimizer-prompt";
-import type { DiagnosticResult, OptimizationResult, PromptKind } from "../types";
+import type { DiagnosticResult, EngineTarget, OptimizationResult, PromptKind } from "../types";
 import { chatDeepSeek } from "./deepseek";
 import { runJevDiagnostics, runJevQualityGate } from "../jev";
 
 export interface OptimizeParams {
   prompt: string;
   kind: PromptKind;
+  engineTarget?: EngineTarget;
   deepseekApiKey: string;
   deepseekModel?: string;
   typesafeApiKey?: string;
@@ -28,6 +29,8 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
   if (isOnlySubject) {
     return {
       optimized: IDENTITY_LOCK_OUTPUT,
+      negativePrompt:
+        "identity mismatch, facial morphing, different person, distorted features, bad likeness",
       summary:
         "Applied reference photo identity lock rule: exact likeness and facial geometry locked to attached reference photo.",
       changes: [
@@ -52,6 +55,7 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
     params.prompt,
     params.kind,
     diagnostics,
+    params.engineTarget,
   );
 
   // Step 3: Execute rewrite with DeepSeek platform API
@@ -63,7 +67,7 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
     jsonMode: true,
   });
 
-  const parsed = parseOptimizationResponse(raw);
+  const parsed = parseOptimizationResponse(raw, params.kind, params.prompt);
 
   // Step 4: Deterministically enforce identity lock rule for image and video
   if (hasSubjectPrefix) {
@@ -87,6 +91,7 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
 
   return {
     optimized: parsed.optimized,
+    negativePrompt: parsed.negativePrompt,
     summary: parsed.summary,
     changes: parsed.changes,
     diagnostics,

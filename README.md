@@ -178,6 +178,17 @@ nodaysidle-prompt-optimizer/
 
 ---
 
+## 📖 Golden Tips & Best Practices
+
+Check out the complete practitioner guide in [**`TIPSANDTRICKS.md`**](./TIPSANDTRICKS.md) covering:
+- **Subject Identity Lock**: How to preserve facial geometry with reference photos.
+- **Speech & Dialogue**: How to prompt speaking characters with natural mouth movement and avoid subtitle text hallucinations in Google Omni 1.1, Veo, Kling, and Runway.
+- **Veo 3.1 vs. Omni 1.1 Compatibility**: How to adapt prompts between foundation video models.
+- **Negative Prompting Cheat Sheet**: Essential artifact guard tokens for images and video.
+- **Camera & Aspect Ratio Cheat Sheet**: Preset specs for lenses, optics, and cinema framing.
+
+---
+
 ## 📄 License
 
 MIT © [nodaysidle](https://github.com/nodaysidle)

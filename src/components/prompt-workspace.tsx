@@ -25,6 +25,7 @@ import { useSettings } from "@/lib/settings-context";
 import type { DiagnosticResult, OptimizationResult, PromptKind } from "@/lib/types";
 import { PROMPT_EXAMPLES, PromptExample } from "@/lib/examples";
 import { cn } from "@/lib/cn";
+import { isSubjectInPhotoPrompt } from "@/lib/optimizer-prompt";
 import { SettingsPanel } from "./settings-panel";
 import { DiffViewer } from "./diff-viewer";
 import { DiagnosticsPanel } from "./diagnostics-badge";
@@ -403,6 +404,15 @@ export function PromptWorkspace() {
                 <span className="text-sky-300/80 ml-auto hidden md:inline text-[11px]">Rich visual details with composition & lighting</span>
               </div>
             )}
+
+            {(kind === "image" || kind === "video") && isSubjectInPhotoPrompt(prompt) && (
+              <div className="mt-2.5 flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-950/25 px-3.5 py-2 text-xs text-emerald-300 animate-fadeIn">
+                <Sparkles className="h-4 w-4 text-emerald-400 shrink-0" />
+                <span className="leading-tight">
+                  <strong className="text-emerald-200 font-semibold">Identity Lock Rule Active:</strong> Output will enforce exact reference likeness and facial geometry.
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Text Area */}
@@ -426,8 +436,8 @@ export function PromptWorkspace() {
                     : kind === "system"
                     ? "e.g. You are a senior frontend developer reviewing code. Be strict about React 19 patterns, state management, and edge cases. Keep suggestions concise..."
                     : kind === "image"
-                    ? "e.g. Cinematic photograph of a vintage cafe in Paris at night, rain reflecting street lamps on cobblestone, warm interior lighting, 35mm lens, shallow depth of field..."
-                    : "e.g. Veo 3.1 / Kling / Runway: A young man power-sliding a matte black supermoto motorcycle full throttle across cobblestone piazza in Trieste, tire smoke billowing, low-angle tracking camera following rear wheel, crowd reacting..."
+                    ? "e.g. The subject in the photo... wearing a tailored black trench coat in rainy London at night, or: Cinematic photograph of a vintage cafe in Paris..."
+                    : "e.g. The subject in the photo... turning towards camera with a subtle smile in a sunlit art studio, or: Veo 3.1: A young man power-sliding a supermoto motorcycle..."
                 }
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}

@@ -1,4 +1,11 @@
-import { buildOptimizerMessages, parseOptimizationResponse } from "../optimizer-prompt";
+import {
+  IDENTITY_LOCK_OUTPUT,
+  buildOptimizerMessages,
+  enforceIdentityLock,
+  isOnlySubjectPrompt,
+  isSubjectInPhotoPrompt,
+  parseOptimizationResponse,
+} from "../optimizer-prompt";
 import type { DiagnosticResult, OptimizationResult, PromptKind } from "../types";
 import { chatDeepSeek } from "./deepseek";
 import { runJevDiagnostics, runJevQualityGate } from "../jev";
@@ -13,6 +20,24 @@ export interface OptimizeParams {
 }
 
 export async function optimizePrompt(params: OptimizeParams): Promise<OptimizationResult> {
+  const isImageOrVideo = params.kind === "image" || params.kind === "video";
+  const hasSubjectPrefix = isImageOrVideo && isSubjectInPhotoPrompt(params.prompt);
+  const isOnlySubject = hasSubjectPrefix && isOnlySubjectPrompt(params.prompt);
+
+  // If prompt is only the subject reference, return deterministic identity lock output immediately
+  if (isOnlySubject) {
+    return {
+      optimized: IDENTITY_LOCK_OUTPUT,
+      summary:
+        "Applied reference photo identity lock rule: exact likeness and facial geometry locked to attached reference photo.",
+      changes: [
+        "Locked subject identity to attached reference photo",
+        "Enforced exact facial geometry and proportions preservation",
+      ],
+      diagnostics: params.existingDiagnostics,
+    };
+  }
+
   // Step 1: Run diagnostics if not already provided
   const diagnostics =
     params.existingDiagnostics ||
@@ -40,7 +65,17 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
 
   const parsed = parseOptimizationResponse(raw);
 
-  // Step 4: Quality Gate evaluation via Jev (if typesafeApiKey available)
+  // Step 4: Deterministically enforce identity lock rule for image and video
+  if (hasSubjectPrefix) {
+    parsed.optimized = enforceIdentityLock(parsed.optimized, params.kind);
+    if (!parsed.changes.some((c) => /identity lock|likeness|facial geometry/i.test(c))) {
+      parsed.changes.unshift(
+        "Enforced reference photo identity lock (exact likeness, facial geometry / proportions)",
+      );
+    }
+  }
+
+  // Step 5: Quality Gate evaluation via Jev (if typesafeApiKey available)
   let qualityGate = undefined;
   if (params.typesafeApiKey?.trim() || process.env.TYPESAFE_API_KEY) {
     qualityGate = await runJevQualityGate({

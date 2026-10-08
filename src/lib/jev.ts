@@ -232,13 +232,18 @@ function runHeuristicDiagnostics(text: string, kind?: PromptKind): DiagnosticRes
   else if (words > 20 && (hasConstraints || hasRole)) clarityScore = 2;
   else if (words < 8) clarityScore = 0;
 
+  const isSubjectRef = /^the subject in the photo/i.test(text.trim());
   const issues: string[] = [];
   const strengths: string[] = [];
 
-  if (isVague) issues.push("Brief or ambiguous scope");
-  if (!hasConstraints) issues.push("Lacks explicit output constraints");
-  if (!hasRole && len > 30) issues.push("No explicit persona/role assigned");
+  if (isVague && !isSubjectRef) issues.push("Brief or ambiguous scope");
+  if (!hasConstraints && !isSubjectRef) issues.push("Lacks explicit output constraints");
+  if (!hasRole && len > 30 && !isSubjectRef) issues.push("No explicit persona/role assigned");
   if (injection) issues.push("Potential injection syntax detected");
+
+  if (isSubjectRef) {
+    strengths.push("Reference photo identity lock specified");
+  }
 
   let suggestedKind: PromptKind = kind || "user";
   if (!kind) {
@@ -246,7 +251,7 @@ function runHeuristicDiagnostics(text: string, kind?: PromptKind): DiagnosticRes
       suggestedKind = "video";
     } else if (hasRole || /system instructions|operational parameters/i.test(text)) {
       suggestedKind = "system";
-    } else if (/photorealistic|4k|octane|unreal engine|cinematic|portrait|lens|bokeh/i.test(text)) {
+    } else if (isSubjectRef || /photorealistic|4k|octane|unreal engine|cinematic|portrait|lens|bokeh/i.test(text)) {
       suggestedKind = "image";
     }
   }

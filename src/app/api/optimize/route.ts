@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { optimizePrompt } from "@/lib/providers/chat";
+import {
+  IDENTITY_LOCK_OUTPUT,
+  isOnlySubjectPrompt,
+  isSubjectInPhotoPrompt,
+} from "@/lib/optimizer-prompt";
 import type { DiagnosticResult, PromptKind } from "@/lib/types";
 
 export async function POST(req: NextRequest) {
@@ -17,6 +22,24 @@ export async function POST(req: NextRequest) {
         { error: "Prompt is required." },
         { status: 400 },
       );
+    }
+
+    const trimmedPrompt = prompt.trim();
+    const effectiveKind = kind || "user";
+    const isImageOrVideo = effectiveKind === "image" || effectiveKind === "video";
+
+    // Immediate resolution when prompt is only the subject reference
+    if (isImageOrVideo && isSubjectInPhotoPrompt(trimmedPrompt) && isOnlySubjectPrompt(trimmedPrompt)) {
+      return NextResponse.json({
+        optimized: IDENTITY_LOCK_OUTPUT,
+        summary:
+          "Applied reference photo identity lock rule: exact likeness and facial geometry locked to attached reference photo.",
+        changes: [
+          "Locked subject identity to attached reference photo",
+          "Enforced exact facial geometry and proportions preservation",
+        ],
+        diagnostics: existingDiagnostics,
+      });
     }
 
     // Key can come from user client header or server environment variable

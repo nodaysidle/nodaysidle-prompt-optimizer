@@ -44,4 +44,16 @@ export const PROMPT_EXAMPLES: PromptExample[] = [
     description: "Support persona with empathy and refund policies",
     prompt: `You are a helpful customer support agent for Acme SaaS. Answer customer billing questions politely, explain our 14-day refund policy, and ask for their invoice ID if they need a refund. Never promise things outside policy.`,
   },
+  {
+    title: "Photo Identity Lock (Image)",
+    kind: "image",
+    description: "Attachment likeness reference lock for portrait generators",
+    prompt: `The subject in the photo... wearing a tailored black trench coat walking through foggy cobblestone streets at night under gas lamps, cinematic 35mm photograph, moody lighting, shallow depth of field`,
+  },
+  {
+    title: "Photo Identity Lock (Video)",
+    kind: "video",
+    description: "Attachment likeness reference lock for Veo / Kling motion",
+    prompt: `The subject in the photo... turning towards camera with a subtle smile in a sunlit modern art gallery, slow-motion tracking shot, soft natural rim lighting`,
+  },
 ];

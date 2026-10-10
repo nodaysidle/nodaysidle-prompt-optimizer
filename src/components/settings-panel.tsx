@@ -16,6 +16,7 @@ import { cn } from "@/lib/cn";
 export function SettingsContent({ className }: { className?: string }) {
   const { settings, updateSetting } = useSettings();
   const [deepseekKeyDraft, setDeepseekKeyDraft] = useState(settings.deepseekApiKey || "");
+  const [openrouterKeyDraft, setOpenrouterKeyDraft] = useState(settings.openrouterApiKey || "");
   const [typesafeKeyDraft, setTypesafeKeyDraft] = useState(settings.typesafeApiKey || "");
   const [testStatus, setTestStatus] = useState<string | null>(null);
   const [testLoading, setTestLoading] = useState(false);
@@ -23,6 +24,12 @@ export function SettingsContent({ className }: { className?: string }) {
   function saveDeepSeekKey() {
     updateSetting("deepseekApiKey", deepseekKeyDraft.trim());
     setTestStatus("DeepSeek API key saved in browser localStorage.");
+    setTimeout(() => setTestStatus(null), 3000);
+  }
+
+  function saveOpenrouterKey() {
+    updateSetting("openrouterApiKey", openrouterKeyDraft.trim());
+    setTestStatus("OpenRouter (Microsoft-Decision-1) key saved in browser localStorage.");
     setTimeout(() => setTestStatus(null), 3000);
   }
 
@@ -183,6 +190,57 @@ export function SettingsContent({ className }: { className?: string }) {
         </div>
       </div>
 
+      {/* Microsoft-Decision-1 / OpenRouter Diagnostics Card */}
+      <div className="space-y-4 rounded-xl border border-border bg-surface/70 p-5">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-semibold text-foreground flex items-center gap-2 text-sm">
+              Microsoft-Decision-1
+              <span className="rounded bg-sky-950/80 px-2 py-0.5 text-[10px] font-semibold text-sky-300 border border-sky-800/80">
+                85ms Sub-100ms Linter
+              </span>
+            </h3>
+            <p className="text-xs text-muted-fg mt-0.5">
+              High-throughput decision model via OpenRouter for ultra-fast snap diagnostics & quality gating.
+            </p>
+          </div>
+          <a
+            href="https://openrouter.ai/microsoft/microsoft-decision-1"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 text-xs text-accent hover:underline font-medium"
+          >
+            OpenRouter Info
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        </div>
+
+        <div className="space-y-2">
+          <label className="block text-xs font-medium text-foreground">
+            OpenRouter API Key <span className="text-muted-fg font-normal">(Primary Fast Decision Engine)</span>
+          </label>
+          <div className="flex gap-2">
+            <input
+              type="password"
+              placeholder="sk-or-v1-..."
+              value={openrouterKeyDraft}
+              onChange={(e) => setOpenrouterKeyDraft(e.target.value)}
+              className="flex-1 rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs text-foreground placeholder:text-muted-fg focus:border-accent focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={saveOpenrouterKey}
+              className="rounded-lg border border-border bg-surface-muted px-3.5 py-2 text-xs font-semibold text-foreground hover:border-accent transition"
+            >
+              Save
+            </button>
+          </div>
+          <p className="text-[11px] text-muted-fg">
+            Runs Microsoft-Decision-1 at 85ms median latency ($0.042/1M tokens, free output tokens).
+          </p>
+        </div>
+      </div>
+
       {/* TypeSafe Jev Diagnostics Card */}
       <div className="space-y-4 rounded-xl border border-border bg-surface/70 p-5">
         <div className="flex items-center justify-between">
@@ -190,11 +248,11 @@ export function SettingsContent({ className }: { className?: string }) {
             <h3 className="font-semibold text-foreground flex items-center gap-2 text-sm">
               TypeSafe Jev
               <span className="rounded bg-emerald-950/80 px-2 py-0.5 text-[10px] font-semibold text-emerald-300 border border-emerald-800/80">
-                System One Linter
+                System One Fallback
               </span>
             </h3>
             <p className="text-xs text-muted-fg mt-0.5">
-              Powers sub-100ms probabilistic rubric scoring, ambiguity auditing, and intent fidelity checks.
+              Secondary calibrated probabilistic engine for rubric scoring and intent verification.
             </p>
           </div>
           <a
@@ -210,7 +268,7 @@ export function SettingsContent({ className }: { className?: string }) {
 
         <div className="space-y-2">
           <label className="block text-xs font-medium text-foreground">
-            TypeSafe API Key <span className="text-muted-fg font-normal">(Optional)</span>
+            TypeSafe API Key <span className="text-muted-fg font-normal">(Optional Fallback)</span>
           </label>
           <div className="flex gap-2">
             <input

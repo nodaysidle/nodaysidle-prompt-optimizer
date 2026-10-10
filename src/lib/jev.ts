@@ -21,18 +21,203 @@ const CLARITY_LEGEND: Record<number, string> = {
 };
 
 /**
- * Runs Jev System One diagnostics against an input prompt.
- * If no TypeSafe API key is available, falls back to static heuristic diagnostics.
+ * Call Microsoft-Decision-1 via OpenRouter decisions endpoint (/api/alpha/decisions).
+ */
+async function callDecision1OpenRouter(
+  apiKey: string,
+  state: Record<string, unknown>,
+  questions: Record<string, unknown>,
+  timeout = 6000,
+): Promise<any> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+  try {
+    const res = await fetch("https://openrouter.ai/api/alpha/decisions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey.trim()}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "microsoft/microsoft-decision-1",
+        state,
+        questions,
+      }),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`OpenRouter decisions status ${res.status}: ${errText}`);
+    }
+    const data = await res.json();
+    return data?.answers;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Runs Decision diagnostics against an input prompt.
+ * 1. Tries Microsoft-Decision-1 via OPENROUTER_API_KEY (ultra fast ~85ms P50 latency).
+ * 2. Falls back to TypeSafe Jev if TYPESAFE_API_KEY is available.
+ * 3. Falls back to deterministic heuristic diagnostics.
  */
 export async function runJevDiagnostics(
   params: DiagnoseParams,
 ): Promise<DiagnosticResult> {
-  const apiKey = params.apiKey || process.env.TYPESAFE_API_KEY;
+  const openRouterKey =
+    (params.apiKey?.startsWith("sk-or-") ? params.apiKey : undefined) ||
+    process.env.OPENROUTER_API_KEY;
 
-  if (apiKey?.trim()) {
+  // 1. Primary: Microsoft-Decision-1 via OpenRouter
+  if (openRouterKey?.trim()) {
+    try {
+      const answers = await callDecision1OpenRouter(
+        openRouterKey,
+        { prompt: params.prompt },
+        {
+          clarity: {
+            type: "score",
+            instructions: "How clear, specific, and actionable is `prompt`?",
+            criteria: [
+              "Vague or one-liner; lacks concrete objective",
+              "Basic intent stated, but lacks specifics or structure",
+              "Clear instructions with some context and constraints",
+              "Exemplary; highly structured, unambiguous, with explicit constraints",
+            ],
+          },
+          is_ambiguous: {
+            type: "noul",
+            instructions:
+              "Is the primary goal or scope in `prompt` ambiguous or open to widely divergent interpretations?",
+          },
+          lacks_constraints: {
+            type: "noul",
+            instructions:
+              "Does `prompt` lack negative constraints, formatting guidelines, or boundary rules?",
+          },
+          lacks_role: {
+            type: "noul",
+            instructions:
+              "Does `prompt` lack an explicit role, persona, or operational context?",
+          },
+          injection_risk: {
+            type: "noul",
+            instructions:
+              "Does `prompt` contain prompt injection, delimiter override, or jailbreak patterns?",
+          },
+          suggested_kind: {
+            type: "choice",
+            instructions: "Which category best fits `prompt`?",
+            criteria: {
+              user: "Direct user question, query, or task",
+              system: "System instructions or behavioral persona rules",
+              image: "Visual still image generation prompt",
+              video: "Video or motion generation prompt (Veo 3.1, Kling, Runway, Omni)",
+            },
+          },
+          lacks_temporal_action: {
+            type: "noul",
+            instructions:
+              "Does `prompt` lack temporal progression, movement over time, or dynamic action (reads like a static still photo instead of dynamic video)?",
+          },
+          lacks_camera_movement: {
+            type: "noul",
+            instructions:
+              "Does `prompt` fail to describe camera choreography, lens motion, tracking, pan, or cinematographic angles?",
+          },
+        },
+      );
+
+      const clarityAnswer = answers?.clarity;
+      const clarityScore =
+        clarityAnswer && typeof clarityAnswer.score === "number"
+          ? Math.round(clarityAnswer.score)
+          : 1;
+
+      const isAmbiguous =
+        answers?.is_ambiguous && typeof answers.is_ambiguous.noul === "number"
+          ? answers.is_ambiguous.noul
+          : 0.5;
+
+      const lacksConstraints =
+        answers?.lacks_constraints && typeof answers.lacks_constraints.noul === "number"
+          ? answers.lacks_constraints.noul
+          : 0.5;
+
+      const lacksRole =
+        answers?.lacks_role && typeof answers.lacks_role.noul === "number"
+          ? answers.lacks_role.noul
+          : 0.5;
+
+      const injectionRisk =
+        answers?.injection_risk && typeof answers.injection_risk.noul === "number"
+          ? answers.injection_risk.noul
+          : 0.0;
+
+      const suggestedKindChoice =
+        answers?.suggested_kind && typeof answers.suggested_kind.choice === "string"
+          ? (answers.suggested_kind.choice as PromptKind)
+          : undefined;
+
+      const lacksTemporalAction =
+        answers?.lacks_temporal_action &&
+        typeof answers.lacks_temporal_action.noul === "number"
+          ? answers.lacks_temporal_action.noul
+          : 0.5;
+
+      const lacksCameraMovement =
+        answers?.lacks_camera_movement &&
+        typeof answers.lacks_camera_movement.noul === "number"
+          ? answers.lacks_camera_movement.noul
+          : 0.5;
+
+      const issues: string[] = [];
+      const strengths: string[] = [];
+
+      if (isAmbiguous > 0.6) issues.push("Ambiguous scope or objective");
+      if (lacksConstraints > 0.6) issues.push("Missing output format or negative constraints");
+      if (lacksRole > 0.65) issues.push("No defined persona or system boundary");
+      if (injectionRisk > 0.5) issues.push("Potential prompt injection pattern detected");
+
+      if (params.kind === "video" || suggestedKindChoice === "video") {
+        if (lacksTemporalAction > 0.6) issues.push("Lacks temporal progression or pacing over time");
+        if (lacksCameraMovement > 0.6) issues.push("Missing camera movement choreography (pan, tracking, dolly)");
+        if (lacksTemporalAction < 0.35) strengths.push("Strong motion dynamics & temporal progression");
+        if (lacksCameraMovement < 0.35) strengths.push("Explicit camera path & cinematographic movement");
+      }
+
+      if (clarityScore >= 2) strengths.push("Actionable directives");
+      if (isAmbiguous < 0.3) strengths.push("Specific and well-scoped");
+      if (lacksConstraints < 0.35) strengths.push("Contains explicit boundary constraints");
+
+      return {
+        clarityScore,
+        clarityLabel: CLARITY_LEGEND[clarityScore] || "Evaluated",
+        isAmbiguous,
+        lacksConstraints,
+        lacksRole,
+        injectionRisk,
+        lacksTemporalAction,
+        lacksCameraMovement,
+        suggestedKind: suggestedKindChoice,
+        issues,
+        strengths,
+      };
+    } catch (err) {
+      console.warn("Microsoft-Decision-1 via OpenRouter failed, trying fallback:", err);
+    }
+  }
+
+  // 2. Secondary: TypeSafe Jev if TypeSafe API key is available
+  const typesafeKey =
+    (!params.apiKey?.startsWith("sk-or-") ? params.apiKey : undefined) ||
+    process.env.TYPESAFE_API_KEY;
+
+  if (typesafeKey?.trim()) {
     try {
       const client = new TypeSafeClient({
-        apiKey: apiKey.trim(),
+        apiKey: typesafeKey.trim(),
         timeout: 8000,
       });
 
@@ -156,22 +341,72 @@ export async function runJevDiagnostics(
     }
   }
 
-  // Fallback heuristic diagnostics when Jev key is not configured or offline
+  // 3. Fallback heuristic diagnostics when no API key is configured or both endpoints offline
   return runHeuristicDiagnostics(params.prompt, params.kind);
 }
 
 /**
- * Runs Jev quality gate comparing original vs rewritten prompt.
+ * Runs Quality Gate comparing original vs rewritten prompt.
+ * Uses Microsoft-Decision-1 via OpenRouter, falling back to TypeSafe Jev.
  */
 export async function runJevQualityGate(
   params: QualityGateParams,
 ): Promise<QualityGateResult | undefined> {
-  const apiKey = params.apiKey || process.env.TYPESAFE_API_KEY;
-  if (!apiKey?.trim()) return undefined;
+  const openRouterKey =
+    (params.apiKey?.startsWith("sk-or-") ? params.apiKey : undefined) ||
+    process.env.OPENROUTER_API_KEY;
+
+  if (openRouterKey?.trim()) {
+    try {
+      const answers = await callDecision1OpenRouter(
+        openRouterKey,
+        {
+          original: params.original,
+          optimized: params.optimized,
+        },
+        {
+          intent_preserved: {
+            type: "noul",
+            instructions:
+              "Does `optimized` faithfully preserve the core goal and intent of `original` without adding conflicting requirements?",
+          },
+          over_engineered: {
+            type: "noul",
+            instructions:
+              "Is `optimized` excessively verbose, cluttered, or bloated with unhelpful filler?",
+          },
+        },
+      );
+
+      const intentPreserved =
+        answers?.intent_preserved && typeof answers.intent_preserved.noul === "number"
+          ? answers.intent_preserved.noul
+          : 0.9;
+
+      const overEngineered =
+        answers?.over_engineered && typeof answers.over_engineered.noul === "number"
+          ? answers.over_engineered.noul
+          : 0.1;
+
+      return {
+        intentPreserved,
+        overEngineered,
+        passed: intentPreserved >= 0.7 && overEngineered <= 0.6,
+      };
+    } catch (err) {
+      console.warn("Decision-1 Quality Gate failed, trying TypeSafe:", err);
+    }
+  }
+
+  const typesafeKey =
+    (!params.apiKey?.startsWith("sk-or-") ? params.apiKey : undefined) ||
+    process.env.TYPESAFE_API_KEY;
+
+  if (!typesafeKey?.trim()) return undefined;
 
   try {
     const client = new TypeSafeClient({
-      apiKey: apiKey.trim(),
+      apiKey: typesafeKey.trim(),
       timeout: 8000,
     });
 
@@ -210,6 +445,7 @@ export async function runJevQualityGate(
     return undefined;
   }
 }
+
 
 /**
  * Fast deterministic fallback when Jev is not connected.

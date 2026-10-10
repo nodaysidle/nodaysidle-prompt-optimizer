@@ -125,6 +125,7 @@ export function PromptWorkspace() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            "x-openrouter-key": settings.openrouterApiKey || "",
             "x-typesafe-key": settings.typesafeApiKey || "",
           },
           body: JSON.stringify({ prompt: trimmed, kind: targetKind }),
@@ -139,7 +140,7 @@ export function PromptWorkspace() {
         setDiagnosing(false);
       }
     },
-    [settings.typesafeApiKey],
+    [settings.typesafeApiKey, settings.openrouterApiKey],
   );
 
   // Debounced auto-diagnose on typing
@@ -174,6 +175,7 @@ export function PromptWorkspace() {
         headers: {
           "Content-Type": "application/json",
           "x-deepseek-key": settings.deepseekApiKey || "",
+          "x-openrouter-key": settings.openrouterApiKey || "",
           "x-typesafe-key": settings.typesafeApiKey || "",
         },
         body: JSON.stringify({

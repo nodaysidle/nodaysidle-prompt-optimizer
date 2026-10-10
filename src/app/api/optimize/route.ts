@@ -60,6 +60,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const openrouterKey =
+      req.headers.get("x-openrouter-key")?.trim() ||
+      process.env.OPENROUTER_API_KEY?.trim();
+
     const typesafeKey =
       req.headers.get("x-typesafe-key")?.trim() ||
       process.env.TYPESAFE_API_KEY?.trim();
@@ -70,7 +74,7 @@ export async function POST(req: NextRequest) {
       engineTarget,
       deepseekApiKey: deepseekKey,
       deepseekModel: model || "deepseek-chat",
-      typesafeApiKey: typesafeKey,
+      typesafeApiKey: openrouterKey || typesafeKey,
       existingDiagnostics,
     });
 

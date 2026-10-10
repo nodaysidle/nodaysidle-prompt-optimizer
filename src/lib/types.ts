@@ -54,6 +54,7 @@ export interface AppSettings {
   deepseekApiKey?: string;
   deepseekModel: string;
   typesafeApiKey?: string;
+  openrouterApiKey?: string;
   autoDiagnose: boolean;
 }
 
@@ -61,5 +62,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   deepseekApiKey: "",
   deepseekModel: "deepseek-chat",
   typesafeApiKey: "",
+  openrouterApiKey: "",
   autoDiagnose: true,
 };

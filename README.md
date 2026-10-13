@@ -1,194 +1,74 @@
-<p align="center">
-  <h1 align="center">Prompt Optimizer</h1>
-</p>
+# NODAYSIDLE Prompt Workbench
 
-<p align="center">
-  <strong>Production-grade prompt engineering workbench powered by DeepSeek Platform Flash API and TypeSafe Jev System One diagnostics. Zero-CORS, client-first, real-time rubric linting, and token-level diff visualization.</strong>
-</p>
+A preservation-first prompt editor for user, system, image and video text. Dark desktop-first layout, existing BrandMark and Geist. Image/video profiles provide text review only, not generation.
 
-<p align="center">
-  <a href="https://nodaysidle-prompt-optimizer.vercel.app"><img src="https://img.shields.io/badge/Live%20Demo-nodaysidle--prompt--optimizer.vercel.app-7928CA?style=flat-square&logo=vercel&logoColor=white" alt="Live Demo"></a>
-  <img src="https://img.shields.io/badge/Engine-DeepSeek--V3%20Flash-4E6EF2?style=flat-square&logo=deepseek&logoColor=white" alt="DeepSeek">
-  <img src="https://img.shields.io/badge/Cognition-TypeSafe%20Jev-FF5722?style=flat-square" alt="TypeSafe Jev">
-  <img src="https://img.shields.io/badge/Framework-Next.js%2016%20%7C%20React%2019-000000?style=flat-square&logo=next.js&logoColor=white" alt="Next.js">
-  <img src="https://img.shields.io/badge/Styling-Tailwind%20CSS%20v4-38B2AC?style=flat-square&logo=tailwind-css&logoColor=white" alt="Tailwind CSS">
-  <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="License">
-</p>
+## Run locally
 
----
+Requires Node 22 or newer and npm.
 
-> **The Problem:** Crafting robust, production-grade LLM and image prompts is slow and guesswork-heavy. Users paste vague inputs into monolithic rewriters without knowing *what* is wrong (missing boundary constraints, ambiguous scope, lack of negative criteria, jailbreak susceptibility), and client-side web apps often suffer from browser CORS failures and leaked API keys.
->
-> **The Result:** Prompt Optimizer combines **TypeSafe Jev's sub-100ms System One probabilistic rubric diagnostics** with **DeepSeek Platform's high-throughput flash-tier engine**. It instantly lints input prompts across 5 dimensions, conditions the rewrite on the detected flaws, runs a quality gate to verify intent preservation, highlights word-level diffs, and provides an in-browser live playground.
-
----
-
-## ⚡ Architecture Flow
-
-```mermaid
-flowchart TD
-    A["Raw Prompt Input (User / System / Image / Video)"] --> B["Jev System One Diagnostics (~80ms)"]
-    
-    subgraph Jev_System_One ["System One Probabilistic Rubric"]
-        B --> B1["Clarity Rubric (0..3 Score)"]
-        B --> B2["Ambiguity Probability (Noul)"]
-        B --> B3["Missing Constraints (Noul)"]
-        B --> B4["Temporal Motion & Pacing (Noul)"]
-        B --> B5["Camera Movement Choreography (Noul)"]
-        B --> B6["Jailbreak / Injection Risk (Noul)"]
-    end
-    
-    B --> C["Diagnostic Context & Prompt Conditioning"]
-    C --> D["DeepSeek Platform Engine (deepseek-chat / deepseek-reasoner)"]
-    
-    D --> E["Optimized Candidate Prompt"]
-    subgraph Output_Formulation ["Target-Specific Output"]
-        E --> E1["LLM Prompts (Structured Markdown / Role Directives)"]
-        E --> E2["Image Prompts (Natural Visual Density for Nano Banana / Flux)"]
-        E --> E3["Video Prompts ([SCENE], [TEMPORAL ACTION], [CAMERA & LIGHTING] for Veo 3.1 / Kling / Runway)"]
-    end
-    
-    E --> F["Jev Quality Gate"]
-    F -->|Intent Preserved? Overengineered?| G["Comparison Workspace"]
-    
-    subgraph UI_Workspace ["Interactive Workspace"]
-        G --> G1["Side-by-Side View"]
-        G --> G2["Word Diff Visualizer (+added / -removed)"]
-        G --> G3["Live Prompt Playground (Test against DeepSeek)"]
-    end
-```
-
----
-
-## 🚀 Key Features
-
-| Feature | Description | Engine / Mechanism |
-|---|---|---|
-| **System One Rubric Linter** | Sub-100ms probabilistic evaluation of prompt clarity, ambiguity, missing negative constraints, temporal motion dynamics, and camera choreography. | TypeSafe Jev (`Score`, `Noul`, `Choice`) |
-| **Video Generation Optimization** | Dedicated pipeline for **Google Veo 3.1, Google Omni, Kling, and Runway**. Generates structured plain-text tags (`[SCENE]`, `[TEMPORAL ACTION]`, `[CAMERA & LIGHTING]`) with second-by-second action progression. | DeepSeek Flash + Jev Temporal Audit |
-| **Image Generation Optimization** | Visual composition, lighting, camera, and aspect ratio engineering for **Google Nano Banana, GPT-1.5 Image, Midjourney, and Flux.1**. | DeepSeek Flash |
-| **Diagnostic-Conditioned Rewriting** | Feeds specific diagnosed flaws directly into the rewriter to eliminate generic boilerplate and resolve exact prompt shortcomings. | DeepSeek Platform API (`deepseek-chat`) |
-| **Quality & Regression Gate** | Evaluates candidate rewrites against originals to verify that core intent is preserved without cognitive bloat. | TypeSafe Jev Verification Cascade |
-| **Word-Level Diff Visualizer** | Interactive additions (green highlight) and removals (red strike-through) with token/word delta counters. | `diff` word tokenization |
-| **Live Prompt Playground** | Execute original and optimized prompts against sample inputs in an in-app drawer to verify real outputs. | Server Edge Route `/api/test-run` |
-| **1-Click Preset Templates** | Instant templates for Veo 3.1 Supermoto drift, Kling FPV chase, SQL queries, code review personas, and visual diffusion prompts. | Prebuilt examples library |
-| **Zero-CORS & Secure Auth** | Direct server-side Next.js route handlers (`/api/optimize`, `/api/diagnose`, `/api/test-run`). No leaked secrets in client bundles. | Next.js App Router Edge Handlers |
-
----
-
-## 🛠 Tech Stack
-
-- **Framework**: [Next.js 16](https://nextjs.org/) (App Router, Turbopack)
-- **UI Runtime**: [React 19](https://react.dev/)
-- **Styling**: [Tailwind CSS v4](https://tailwindcss.com/)
-- **Primary Inference**: [DeepSeek Platform API](https://platform.deepseek.com) (`deepseek-chat` / `deepseek-reasoner`)
-- **System One Diagnostics**: [@typesafe-ai/sdk](https://typesafe.ai) (Jev probabilistic classification & scoring)
-- **Diffing Engine**: `diff`
-- **Icons**: `lucide-react`
-- **Deployment**: [Vercel](https://vercel.com)
-
----
-
-## 💻 Quick Start
-
-### 1. Clone & Install Dependencies
-
-```bash
-git clone https://github.com/nodaysidle/nodaysidle-prompt-optimizer.git
-cd nodaysidle-prompt-optimizer
-npm install
-```
-
-### 2. Configure Environment (Optional)
-
-You can provide API keys via `.env.local` for local development, or enter them directly in the app's **Settings** panel (stored securely in browser `localStorage`):
-
-```bash
-cp .env.example .env.local
-```
-
-Edit `.env.local`:
-
-```ini
-# DeepSeek API Key (from https://platform.deepseek.com)
-DEEPSEEK_API_KEY=sk-...
-
-# Optional: TypeSafe Jev API Key (from https://typesafe.ai)
-TYPESAFE_API_KEY=ts-...
-```
-
-*(Note: If `TYPESAFE_API_KEY` is not provided, the app automatically runs fast deterministic fallback heuristics).*
-
-### 3. Run Development Server
-
-```bash
+```sh
+npm ci
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+Open http://localhost:3000. Local diagnostics work without credentials. Configure a DeepSeek BYOK key in Settings to rewrite or run text evaluations. Connection tests and real runs may incur charges; the automated tests use mocks only.
 
-### 4. Build for Production
+## Workbench
 
-```bash
+- Minimal is the default: smallest useful edit. Structured organizes supplied information. Creative authorizes optional expansion, with assumptions listed separately.
+- Missing facts are questions outside the candidate; new generated bracket variables/tags and invalid JSON are rejected. Existing literal user brackets remain valid.
+- Draft diagnostics are type-aware rule signals by default, not calibrated probabilities. Short tasks, optional personas and static-camera intent are valid. External diagnosis requires an explicit provider selection; local fallback requires separate consent. There is no silent cross-provider cascade.
+- Candidates include changes, questions, assumptions, warnings and a preservation check state: passed, needs review or unavailable. Failed/unavailable checks do not become successful checks. A passed rubric is not a guarantee of downstream model quality.
+- Draft edits cancel old requests; request identities also reject late results. Diff and tests bind to the frozen original/kind/mode/profile/model. Candidate edits and restored history make old verification stale.
+- Examples and next-draft replacement support Undo. Ratio/lens controls replace a single selection instead of accumulating conflicts.
+- Text A/B sends two actual completions with the same scenario, model, temperature, output cap and kind-specific roles. If either side fails, no comparison is shown. Elapsed time is measured; usage is displayed only if returned. Visual A/B is disabled.
+- Local versioned history stores originals, candidates, mode/profile/model and checks/notes. Favorites are protected from recent-history rolling eviction; explicit deletion/clear still removes them. Storage failures are surfaced. Legacy malformed entries are skipped, legacy checks are unverified, and old credential storage is forgotten.
+
+## Provider contracts
+
+DeepSeek defaults to `deepseek-flash` (DeepSeek-V4.1-Flash); the other supported option is `deepseek-v4-pro` (DeepSeek-V4-Pro-0813). Thinking is explicitly disabled so temperature applies. Old saved `deepseek-chat`/`deepseek-reasoner` aliases migrate to Flash/Pro, not unsupported endpoint names.
+
+Contracts reviewed 2026-10-14: [chat completions](https://api-docs.deepseek.com/api/create-chat-completion), [models/pricing](https://api-docs.deepseek.com/quick_start/pricing). Only `finish_reason: stop` is accepted; truncated/filtered/aborted/tool responses are actionable failures. JSON rewriting must satisfy the full schema, never raw-text or regex fallbacks.
+
+Profiles live in `src/lib/profiles.ts`, with version, capability and official-source links. [FLUX.2](https://docs.bfl.ai/guides/prompting_guide_flux2) has no negative prompts. Veo 3.1 is labeled a legacy workflow. Midjourney v6.1/SDXL/Kling/Runway profiles are explicitly historical or support-limited. Unknown negative-field and host syntax support is not invented. Recheck official contracts before extending a profile; no visual rendering API is integrated.
+
+## Private shared access and privacy
+
+BYOK works anonymously. Any owner-funded DeepSeek, OpenRouter or TypeSafe environment key requires a configured `APP_ACCESS_TOKEN` and the explicitly supplied matching `x-app-access-token`. Without the configured token, **all shared-key fallback is disabled**. Provider keys are resolved separately, never guessed by prefix. Comparison is constant-time over fixed-length digests. `/api/config` returns booleans only, never credentials.
+
+Optional server environment configuration:
+
+```ini
+APP_ACCESS_TOKEN=
+DEEPSEEK_API_KEY=
+OPENROUTER_API_KEY=
+TYPESAFE_API_KEY=
+```
+
+The owner must configure `APP_ACCESS_TOKEN` before using shared keys, including on Vercel. Treat it as a private shared secret, not per-user identity/authentication. Distribute it only to trusted users, rotate it when needed, use HTTPS, and add deployment firewall/access restrictions and provider spending quotas. The in-memory throttle is **per server instance**, not a distributed or durable quota. Thirty requests per minute per credential digest, a bounded 1,000-entry map, 150KB request bodies with a 15-second ingress deadline, 20,000-character prompt/scenario bounds, provider deadlines, cancellation and output caps reduce abuse but do not replace platform controls.
+
+Provider keys and the owner token live in session memory by default. Provider keys may optionally be remembered as **plaintext browser localStorage**, which is accessible to origin scripts and other users of that browser. The owner token is never persisted. Forget clears session credentials and saved credential settings; browser failure messages explain when manual site-data deletion is needed. Old plaintext key settings are removed without silently re-consenting. Do not use browser remembering on a shared device.
+
+Rewrites/evaluations send prompt data and credentials through this app's Node route handlers to the selected provider. Local diagnostics do not call external providers. Optional diagnostics send data only to the selected provider. This app does not log raw upstream bodies/credentials; errors are sanitized and include an app request ID. This is not a promise about hosting-platform logs or provider retention policies. History stays on this browser; prompts you enter may themselves contain sensitive data, so review what you submit.
+
+## Architecture
+
+Next.js 16.3.8 App Router, React 19, TypeScript, Tailwind 4. Native accessible modal dialogs share Escape/focus-wrap/focus-return/scroll-lock behavior. The draft editor is the only live draft copy; result snapshots are immutable inputs with editable candidates.
+
+`src/lib/validation.ts` checks runtime domains. `src/lib/server/` handles bounded request parsing, private shared access and errors. `src/lib/providers/completion.ts` handles bounded completions/deadlines/cancellation/schema and returned usage. `src/lib/jev.ts` handles selected external diagnostics and local rules. `src/lib/storage.ts` handles versioned persistence/migration. No client diagnostics are trusted as instructions: the server recomputes its own bounded observations.
+
+## Verification
+
+```sh
+npm run lint
+npm run typecheck
+npm test
 npm run build
-npm run start
+npx playwright install chromium
+npm run test:e2e
+npm audit --omit=dev
 ```
 
----
+For an existing browser, set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to its absolute Chrome path. CI runs lint, typecheck, unit/ReactDOM tests, build, mocked browser tests and production dependency audit. Build self-hosts Geist via Next/font and may need network access to retrieve fonts.
 
-## 🔒 Security & Privacy Architecture
-
-- **No `NEXT_PUBLIC_*` Secret Leaks**: API keys are never bundled into client-side JavaScript.
-- **Client-Side Storage**: When entered via the UI, credentials remain in your browser's `localStorage` and are sent exclusively over HTTPS to the app's edge route handlers.
-- **Server Deployment**: When hosting on Vercel, set `DEEPSEEK_API_KEY` and `TYPESAFE_API_KEY` in **Vercel Project Settings → Environment Variables** to provide shared access without client exposure.
-
----
-
-## 📁 Project Structure
-
-```
-nodaysidle-prompt-optimizer/
-├── src/
-│   ├── app/
-│   │   ├── api/
-│   │   │   ├── diagnose/route.ts    # Jev System One diagnostics route
-│   │   │   ├── optimize/route.ts    # DeepSeek optimization & Jev quality gate route
-│   │   │   └── test-run/route.ts    # Live prompt playground runner
-│   │   ├── settings/page.tsx        # Standalone settings view
-│   │   ├── layout.tsx               # Root layout & providers
-│   │   └── page.tsx                 # Main application page
-│   ├── components/
-│   │   ├── diagnostics-badge.tsx    # Live Jev rubric & flaw display
-│   │   ├── diff-viewer.tsx          # Word-level addition/deletion diff viewer
-│   │   ├── prompt-workspace.tsx     # Main workspace UI
-│   │   ├── settings-panel.tsx       # DeepSeek & Jev configuration modal
-│   │   └── test-modal.tsx           # Prompt playground runner modal
-│   └── lib/
-│       ├── examples.ts              # 1-click sample templates
-│       ├── jev.ts                   # TypeSafe Jev System One client & heuristics
-│       ├── optimizer-prompt.ts      # Prompt templates & robust JSON parsing
-│       ├── providers/
-│       │   ├── chat.ts              # Orchestration pipeline
-│       │   └── deepseek.ts          # DeepSeek platform API client
-│       ├── settings-context.tsx     # Settings state management
-│       ├── storage.ts               # localStorage persistence
-│       └── types.ts                 # TypeScript domain types
-└── README.md
-```
-
----
-
-## 📖 Golden Tips & Best Practices
-
-Check out the complete practitioner guide in [**`TIPSANDTRICKS.md`**](./TIPSANDTRICKS.md) covering:
-- **Subject Identity Lock**: How to preserve facial geometry with reference photos.
-- **Speech & Dialogue**: How to prompt speaking characters with natural mouth movement and avoid subtitle text hallucinations in Google Omni 1.1, Veo, Kling, and Runway.
-- **Veo 3.1 vs. Omni 1.1 Compatibility**: How to adapt prompts between foundation video models.
-- **Negative Prompting Cheat Sheet**: Essential artifact guard tokens for images and video.
-- **Camera & Aspect Ratio Cheat Sheet**: Preset specs for lenses, optics, and cinema framing.
-
----
-
-## 📄 License
-
-MIT © [nodaysidle](https://github.com/nodaysidle)
+Unit tests cover invalid input, every shared provider access boundary, throttle, deadline/cancellation, redaction, completion schema, missing quality answers, local rubric behavior, modes/profiles/presets/history and race/frozen-diff behavior. Browser tests exercise keyboard dialogs, editor actions, example Undo, settings/session persistence, mocked text A/B and narrow overflow. Mocks prove software boundaries, not paid-provider quality or downstream rendering fidelity.

@@ -1,21 +1,24 @@
-import type { PromptKind } from "./types";
+import type { EngineTarget, PromptKind } from "./types";
 
 export interface PromptExample {
   title: string;
   kind: PromptKind;
   description: string;
   prompt: string;
+  engineTarget?: EngineTarget;
 }
 
 export const PROMPT_EXAMPLES: PromptExample[] = [
   {
     title: "Veo 3.1 Supermoto Drift",
+    engineTarget: "veo",
     kind: "video",
     description: "Temporal drift with tire smoke and camera tracking in Trieste",
     prompt: `A young man power-sliding a matte black 2008 Honda CRF450R supermoto motorcycle full throttle sideways across a sun-baked cobblestone piazza in Trieste Italy with Adriatic Sea background, tire smoke billowing, pedestrian crowd reacting in awe, harsh midday sun, photorealistic Canon EOS R5.`,
   },
   {
-    title: "Kling / Runway FPV Chase",
+    title: "Kling FPV Chase (historical)",
+    engineTarget: "kling",
     kind: "video",
     description: "High-speed camera path through neon cyber city",
     prompt: `FPV drone descending through misty cyberpunk neon canyon, chasing an agile futuristic hoverbike through narrow wet alleyways with neon reflection puddles, rapid banking turns, sparks flying from wall scrapes, cinematic anamorphic lens.`,

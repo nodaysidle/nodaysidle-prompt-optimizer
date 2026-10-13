@@ -1,169 +1,44 @@
 "use client";
+import { useEffect, useRef, useState } from "react";
+import { useSettings, requestHeaders } from "@/lib/settings-context";
+import type { CompletionResult, DraftSnapshot } from "@/lib/types";
+import { Dialog } from "./dialog";
 
-import { useState } from "react";
-import { Loader2, Play, Terminal, X, Copy, Check, Sparkles } from "lucide-react";
-import { useSettings } from "@/lib/settings-context";
-
-interface TestModalProps {
-  open: boolean;
-  onClose: () => void;
-  prompt: string;
-  title?: string;
-}
-
-export function TestModal({
-  open,
-  onClose,
-  prompt,
-  title = "Test Prompt in Playground",
-}: TestModalProps) {
+interface Evaluation { before: CompletionResult; after?: CompletionResult; config: { model: string; temperature: number; maxTokens: number; thinking: string; testInput: string; kind: string }; }
+function EvaluationContent({ snapshot, candidate }: { snapshot: DraftSnapshot; candidate?: string }) {
   const { settings } = useSettings();
-  const [testInput, setTestInput] = useState("");
-  const [output, setOutput] = useState<string | null>(null);
+  const [sample, setSample] = useState("");
+  const [temperature, setTemperature] = useState(0.3);
+  const [maxTokens, setMaxTokens] = useState(1024);
+  const [result, setResult] = useState<Evaluation | null>(null);
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-
-  if (!open) return null;
-
-  async function handleRun() {
-    setLoading(true);
-    setError(null);
-    setOutput(null);
-
+  const controller = useRef<AbortController | null>(null);
+  const sequence = useRef(0);
+  useEffect(() => () => { sequence.current++; controller.current?.abort(); }, []);
+  function invalidate() { sequence.current++; controller.current?.abort(); setLoading(false); setResult(null); setError(""); }
+  async function run() {
+    invalidate(); const id = ++sequence.current;
+    const current = new AbortController(); controller.current = current; setLoading(true);
     try {
-      const res = await fetch("/api/test-run", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-deepseek-key": settings.deepseekApiKey || "",
-        },
-        body: JSON.stringify({
-          prompt,
-          testInput,
-          model: settings.deepseekModel,
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Execution failed");
-      }
-      setOutput(data.output);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Test execution failed.");
-    } finally {
-      setLoading(false);
-    }
+      const response = await fetch("/api/test-run", { method: "POST", headers: requestHeaders(settings), signal: current.signal, body: JSON.stringify({ ...snapshot, candidate, testInput: sample, temperature, maxTokens }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Evaluation failed.");
+      if (sequence.current === id) setResult(data);
+    } catch (e) { if (sequence.current === id && !current.signal.aborted) setError(e instanceof Error ? e.message : "Evaluation failed."); }
+    finally { if (sequence.current === id) setLoading(false); }
   }
-
-  async function copyOutput() {
-    if (!output) return;
-    await navigator.clipboard.writeText(output);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div
-        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-        onClick={onClose}
-      />
-      <div className="relative z-10 flex max-h-[90vh] w-full max-w-3xl flex-col rounded-2xl border border-border bg-background p-6 shadow-2xl">
-        <div className="flex items-center justify-between border-b border-border pb-4">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400">
-              <Terminal className="h-4 w-4" />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-foreground">{title}</h3>
-              <p className="text-xs text-muted-fg">
-                Live execution test via DeepSeek Platform ({settings.deepseekModel})
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-1.5 text-muted-fg hover:bg-surface-muted hover:text-foreground transition"
-            aria-label="Close"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        <div className="flex-1 space-y-4 overflow-y-auto py-4">
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-muted-fg">
-              Active Prompt Being Tested
-            </label>
-            <pre className="mt-1.5 max-h-36 overflow-auto rounded-xl border border-border bg-surface/60 p-3 font-mono text-xs text-foreground/90 leading-relaxed">
-              {prompt}
-            </pre>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-muted-fg">
-              Sample User Input / Scenario Payload (Optional)
-            </label>
-            <textarea
-              value={testInput}
-              onChange={(e) => setTestInput(e.target.value)}
-              placeholder="e.g. Find all inactive users who have not logged in for 90 days, return as JSON..."
-              className="mt-1.5 h-20 w-full resize-none rounded-xl border border-border bg-surface p-3 font-mono text-xs text-foreground placeholder:text-muted-fg/60 focus:border-accent focus:outline-none"
-            />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <button
-              type="button"
-              disabled={loading}
-              onClick={handleRun}
-              className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-xs font-semibold text-accent-foreground shadow hover:bg-accent-strong disabled:opacity-50 transition cursor-pointer"
-            >
-              {loading ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Play className="h-3.5 w-3.5" />
-              )}
-              Run Live Test
-            </button>
-            {error && <span className="text-xs text-rose-400">{error}</span>}
-          </div>
-
-          {output && (
-            <div className="space-y-2 rounded-xl border border-border bg-surface/70 p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-wider text-foreground flex items-center gap-1.5">
-                  <Sparkles className="h-3.5 w-3.5 text-accent" />
-                  Live Model Response
-                </span>
-                <button
-                  type="button"
-                  onClick={copyOutput}
-                  className="inline-flex items-center gap-1 text-xs text-muted-fg hover:text-foreground transition"
-                >
-                  {copied ? (
-                    <>
-                      <Check className="h-3.5 w-3.5 text-emerald-400" />
-                      Copied
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="h-3.5 w-3.5" />
-                      Copy Output
-                    </>
-                  )}
-                </button>
-              </div>
-              <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-lg bg-background p-3 font-mono text-xs leading-relaxed text-foreground">
-                {output}
-              </pre>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+  return <><p className="help">{candidate ? "Two actual text completions, with identical model, temperature, output cap and scenario. Results vary between runs; this is not a quality score." : "One actual text completion using the selected prompt kind."} Sending this test may incur provider charges.</p>
+    <p>Model: {snapshot.model} · thinking disabled · prompt kind: {snapshot.kind}</p>
+    <details><summary>Prompts under test</summary><h3>Before</h3><pre>{snapshot.prompt}</pre>{candidate && <><h3>After</h3><pre>{candidate}</pre></>}</details>
+    <label htmlFor="scenario">Identical scenario data for both prompts</label><textarea id="scenario" maxLength={20000} value={sample} onChange={(e) => { invalidate(); setSample(e.target.value); }} />
+    <div className="control-grid"><div><label htmlFor="temperature">Temperature</label><input id="temperature" type="number" min="0" max="2" step="0.1" value={temperature} onChange={(e) => { invalidate(); setTemperature(Number(e.target.value)); }} /></div><div><label htmlFor="max-tokens">Maximum output tokens per side</label><input id="max-tokens" type="number" min="64" max="4096" value={maxTokens} onChange={(e) => { invalidate(); setMaxTokens(Number(e.target.value)); }} /></div></div>
+    <button className="primary" onClick={run} disabled={loading}>{loading ? "Evaluating…" : candidate ? "Run paired text evaluation" : "Run single text test"}</button>
+    <p role="status">{error || (!result && !loading ? "No evaluation run yet." : "")}</p>
+    {result && <><p className="help">Returned configuration: {result.config.model} · temperature {result.config.temperature} · max {result.config.maxTokens} · thinking {result.config.thinking}. {result.config.kind === "system" ? "System prompt plus user scenario." : "User prompt plus scenario data in user role."}</p><div className="evaluation-grid">{[result.before, result.after].map((side, index) => side ? <section key={index}><h3>{index === 0 ? "Before output" : "After output"}</h3><pre>{side.content}</pre><p className="help">{side.model} · {side.elapsedMs} ms{side.usage ? ` · ${side.usage.prompt_tokens} input / ${side.usage.completion_tokens} output / ${side.usage.total_tokens} total tokens` : " · Usage not returned"}</p><button onClick={async () => { try { await navigator.clipboard.writeText(side.content); setError("Output copied."); } catch { setError("Clipboard unavailable. Select the output and copy manually."); } }}>Copy {index === 0 ? "before" : "after"} output</button></section> : null)}</div></>}
+  </>;
+}
+export function TestModal({ open, onClose, snapshot, candidate }: { open: boolean; onClose: () => void; snapshot: DraftSnapshot; candidate?: string }) {
+  if (!open || snapshot.kind === "image" || snapshot.kind === "video") return null;
+  return <Dialog title={candidate ? "Paired text evaluation" : "Text test"} onClose={onClose}><EvaluationContent key={JSON.stringify([snapshot, candidate])} snapshot={snapshot} candidate={candidate} /></Dialog>;
 }

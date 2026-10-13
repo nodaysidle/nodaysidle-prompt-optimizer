@@ -1,533 +1,99 @@
-import { TypeSafeClient, choice, noul, score } from "@typesafe-ai/sdk";
-import type { DiagnosticResult, QualityGateResult, PromptKind } from "./types";
+import { TypeSafeClient, noul, score, type Questions } from "@typesafe-ai/sdk";
+import type { DiagnosticResult, DiagnosticSource, PromptKind, QualityGateResult } from "./types";
+import { numberValue, record } from "./validation";
+import { boundedJson, ProviderError } from "./providers/completion";
 
 export interface DiagnoseParams {
-  prompt: string;
-  kind?: PromptKind;
-  apiKey?: string;
+  prompt: string; kind: PromptKind; source: DiagnosticSource; apiKey?: string;
+  allowLocalFallback?: boolean; signal?: AbortSignal;
 }
-
-export interface QualityGateParams {
-  original: string;
-  optimized: string;
-  apiKey?: string;
-}
-
-const CLARITY_LEGEND: Record<number, string> = {
-  0: "Vague / Needs structure",
-  1: "Basic intent / Missing details",
-  2: "Clear instructions / Good constraints",
-  3: "Exemplary / Production ready",
+const LEGEND = ["Needs a goal", "Needs clarification", "Clear", "Specific"];
+export const RUBRICS: Record<PromptKind, string> = {
+  user: "Evaluate the task goal, necessary context and requested output only when needed. A short clear task can score highly. Persona and negative constraints are not mandatory.",
+  system: "Evaluate behavioral boundaries, tool permissions where relevant, output expectations and handling unknowns/errors. Persona alone is not a goal.",
+  image: "Evaluate identifiable subject, composition and style where appropriate. Do not require persona, negative prompts, lens or resolution.",
+  video: "Evaluate supplied duration, action over time and camera intent where relevant. Static, locked-off cameras and still subjects are valid intentional choices. Do not require camera movement.",
 };
-
-/**
- * Call Microsoft-Decision-1 via OpenRouter decisions endpoint (/api/alpha/decisions).
- */
-async function callDecision1OpenRouter(
-  apiKey: string,
-  state: Record<string, unknown>,
-  questions: Record<string, unknown>,
-  timeout = 6000,
-): Promise<any> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeout);
-  try {
-    const res = await fetch("https://openrouter.ai/api/alpha/decisions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey.trim()}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "microsoft/microsoft-decision-1",
-        state,
-        questions,
-      }),
-      signal: controller.signal,
-    });
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`OpenRouter decisions status ${res.status}: ${errText}`);
-    }
-    const data = await res.json();
-    return data?.answers;
-  } finally {
-    clearTimeout(timer);
-  }
+export function runHeuristicDiagnostics(text: string, kind: PromptKind): DiagnosticResult {
+  const vague = /\b(something|whatever|help me|make it better)\b/i.test(text) || text.trim().split(/\s+/).length < 2;
+  const injection = /ignore (all |the )?(previous|system)|jailbreak|disregard (all |the )?instructions/i.test(text);
+  const boundaries = /never|do not|only|limit|json|table|bullet|format|unknown|error|permission/i.test(text);
+  const camera = /static|locked.off|fixed camera|camera|tracking|pan|dolly|zoom/i.test(text);
+  const action = /\b\d+\s*(s|seconds)\b|walking|walks|turns|turning|moves|running|still|stationary|drifting|flowing|flying|spinning|timelapse/i.test(text);
+  const findings: DiagnosticResult["findings"] = [];
+  if (vague) findings.push({ title: "Clarify the goal", why: "The task or subject is open to different interpretations.", question: "What specifically should the output achieve or depict?" });
+  if (kind === "system" && !boundaries) findings.push({ title: "Define boundaries", why: "Reusable system instructions need a policy for limits and unknowns.", question: "What should the agent do when required information is unavailable?" });
+  if (kind === "user" && /\bsql\b/i.test(text) && !/create table|schema|columns/i.test(text)) findings.push({ title: "Supply schema context", why: "Table names alone do not establish column names or joins.", question: "Which columns and join keys are available?" });
+  if (kind === "video" && !action) findings.push({ title: "Clarify action", why: "The shot's behavior over time is not stated. A deliberately still shot is valid.", question: "What changes during the shot, or should the subject remain still?" });
+  const strengths = [!vague ? "An identifiable task or subject is present." : "", camera && kind === "video" ? "Camera intent is stated, including static choices." : "", boundaries ? "Explicit constraints are present." : ""].filter(Boolean);
+  const clarityScore = vague ? 1 : findings.length ? 2 : 3;
+  return { source: "local", clarityScore, clarityLabel: LEGEND[clarityScore], isAmbiguous: vague ? 0.8 : 0.2,
+    lacksConstraints: kind === "system" && !boundaries ? 0.8 : 0.2, lacksRole: 0, injectionRisk: injection ? 0.9 : 0,
+    ...(kind === "video" ? { lacksTemporalAction: action ? 0.1 : 0.7, lacksCameraMovement: camera ? 0.1 : 0.4 } : {}),
+    suggestedKind: kind, findings: findings.slice(0, 3), issues: findings.map((f) => f.title), strengths };
 }
-
-/**
- * Runs Decision diagnostics against an input prompt.
- * 1. Tries Microsoft-Decision-1 via OPENROUTER_API_KEY (ultra fast ~85ms P50 latency).
- * 2. Falls back to TypeSafe Jev if TYPESAFE_API_KEY is available.
- * 3. Falls back to deterministic heuristic diagnostics.
- */
-export async function runJevDiagnostics(
-  params: DiagnoseParams,
-): Promise<DiagnosticResult> {
-  const openRouterKey =
-    (params.apiKey?.startsWith("sk-or-") ? params.apiKey : undefined) ||
-    process.env.OPENROUTER_API_KEY;
-
-  // 1. Primary: Microsoft-Decision-1 via OpenRouter
-  if (openRouterKey?.trim()) {
-    try {
-      const answers = await callDecision1OpenRouter(
-        openRouterKey,
-        { prompt: params.prompt },
-        {
-          clarity: {
-            type: "score",
-            instructions: "How clear, specific, and actionable is `prompt`?",
-            criteria: [
-              "Vague or one-liner; lacks concrete objective",
-              "Basic intent stated, but lacks specifics or structure",
-              "Clear instructions with some context and constraints",
-              "Exemplary; highly structured, unambiguous, with explicit constraints",
-            ],
-          },
-          is_ambiguous: {
-            type: "noul",
-            instructions:
-              "Is the primary goal or scope in `prompt` ambiguous or open to widely divergent interpretations?",
-          },
-          lacks_constraints: {
-            type: "noul",
-            instructions:
-              "Does `prompt` lack negative constraints, formatting guidelines, or boundary rules?",
-          },
-          lacks_role: {
-            type: "noul",
-            instructions:
-              "Does `prompt` lack an explicit role, persona, or operational context?",
-          },
-          injection_risk: {
-            type: "noul",
-            instructions:
-              "Does `prompt` contain prompt injection, delimiter override, or jailbreak patterns?",
-          },
-          suggested_kind: {
-            type: "choice",
-            instructions: "Which category best fits `prompt`?",
-            criteria: {
-              user: "Direct user question, query, or task",
-              system: "System instructions or behavioral persona rules",
-              image: "Visual still image generation prompt",
-              video: "Video or motion generation prompt (Veo 3.1, Kling, Runway, Omni)",
-            },
-          },
-          lacks_temporal_action: {
-            type: "noul",
-            instructions:
-              "Does `prompt` lack temporal progression, movement over time, or dynamic action (reads like a static still photo instead of dynamic video)?",
-          },
-          lacks_camera_movement: {
-            type: "noul",
-            instructions:
-              "Does `prompt` fail to describe camera choreography, lens motion, tracking, pan, or cinematographic angles?",
-          },
-        },
-      );
-
-      const clarityAnswer = answers?.clarity;
-      const clarityScore =
-        clarityAnswer && typeof clarityAnswer.score === "number"
-          ? Math.round(clarityAnswer.score)
-          : 1;
-
-      const isAmbiguous =
-        answers?.is_ambiguous && typeof answers.is_ambiguous.noul === "number"
-          ? answers.is_ambiguous.noul
-          : 0.5;
-
-      const lacksConstraints =
-        answers?.lacks_constraints && typeof answers.lacks_constraints.noul === "number"
-          ? answers.lacks_constraints.noul
-          : 0.5;
-
-      const lacksRole =
-        answers?.lacks_role && typeof answers.lacks_role.noul === "number"
-          ? answers.lacks_role.noul
-          : 0.5;
-
-      const injectionRisk =
-        answers?.injection_risk && typeof answers.injection_risk.noul === "number"
-          ? answers.injection_risk.noul
-          : 0.0;
-
-      const suggestedKindChoice =
-        answers?.suggested_kind && typeof answers.suggested_kind.choice === "string"
-          ? (answers.suggested_kind.choice as PromptKind)
-          : undefined;
-
-      const lacksTemporalAction =
-        answers?.lacks_temporal_action &&
-        typeof answers.lacks_temporal_action.noul === "number"
-          ? answers.lacks_temporal_action.noul
-          : 0.5;
-
-      const lacksCameraMovement =
-        answers?.lacks_camera_movement &&
-        typeof answers.lacks_camera_movement.noul === "number"
-          ? answers.lacks_camera_movement.noul
-          : 0.5;
-
-      const issues: string[] = [];
-      const strengths: string[] = [];
-
-      if (isAmbiguous > 0.6) issues.push("Ambiguous scope or objective");
-      if (lacksConstraints > 0.6) issues.push("Missing output format or negative constraints");
-      if (lacksRole > 0.65) issues.push("No defined persona or system boundary");
-      if (injectionRisk > 0.5) issues.push("Potential prompt injection pattern detected");
-
-      if (params.kind === "video" || suggestedKindChoice === "video") {
-        if (lacksTemporalAction > 0.6) issues.push("Lacks temporal progression or pacing over time");
-        if (lacksCameraMovement > 0.6) issues.push("Missing camera movement choreography (pan, tracking, dolly)");
-        if (lacksTemporalAction < 0.35) strengths.push("Strong motion dynamics & temporal progression");
-        if (lacksCameraMovement < 0.35) strengths.push("Explicit camera path & cinematographic movement");
-      }
-
-      if (clarityScore >= 2) strengths.push("Actionable directives");
-      if (isAmbiguous < 0.3) strengths.push("Specific and well-scoped");
-      if (lacksConstraints < 0.35) strengths.push("Contains explicit boundary constraints");
-
-      return {
-        clarityScore,
-        clarityLabel: CLARITY_LEGEND[clarityScore] || "Evaluated",
-        isAmbiguous,
-        lacksConstraints,
-        lacksRole,
-        injectionRisk,
-        lacksTemporalAction,
-        lacksCameraMovement,
-        suggestedKind: suggestedKindChoice,
-        issues,
-        strengths,
-      };
-    } catch (err) {
-      console.warn("Microsoft-Decision-1 via OpenRouter failed, trying fallback:", err);
-    }
-  }
-
-  // 2. Secondary: TypeSafe Jev if TypeSafe API key is available
-  const typesafeKey =
-    (!params.apiKey?.startsWith("sk-or-") ? params.apiKey : undefined) ||
-    process.env.TYPESAFE_API_KEY;
-
-  if (typesafeKey?.trim()) {
-    try {
-      const client = new TypeSafeClient({
-        apiKey: typesafeKey.trim(),
-        timeout: 8000,
-      });
-
-      const { answers } = await client.systemOne({
-        state: { prompt: params.prompt },
-        questions: {
-          clarity: score(
-            "How clear, specific, and actionable is `prompt`?",
-            [
-              "Vague or one-liner; lacks concrete objective",
-              "Basic intent stated, but lacks specifics or structure",
-              "Clear instructions with some context and constraints",
-              "Exemplary; highly structured, unambiguous, with explicit constraints",
-            ],
-          ),
-          is_ambiguous: noul(
-            "Is the primary goal or scope in `prompt` ambiguous or open to widely divergent interpretations?",
-          ),
-          lacks_constraints: noul(
-            "Does `prompt` lack negative constraints, formatting guidelines, or boundary rules?",
-          ),
-          lacks_role: noul(
-            "Does `prompt` lack an explicit role, persona, or operational context?",
-          ),
-          injection_risk: noul(
-            "Does `prompt` contain prompt injection, delimiter override, or jailbreak patterns?",
-          ),
-          suggested_kind: choice(
-            "Which category best fits `prompt`?",
-            {
-              user: "Direct user question, query, or task",
-              system: "System instructions or behavioral persona rules",
-              image: "Visual still image generation prompt",
-              video: "Video or motion generation prompt (Veo 3.1, Kling, Runway, Omni)",
-            },
-          ),
-          lacks_temporal_action: noul(
-            "Does `prompt` lack temporal progression, movement over time, or dynamic action (reads like a static still photo instead of dynamic video)?",
-          ),
-          lacks_camera_movement: noul(
-            "Does `prompt` fail to describe camera choreography, lens motion, tracking, pan, or cinematographic angles?",
-          ),
-        },
-      });
-
-      const clarityAnswer = answers.clarity;
-      const clarityScore =
-        clarityAnswer && "score" in clarityAnswer
-          ? Math.round(clarityAnswer.score)
-          : 1;
-
-      const isAmbiguous =
-        answers.is_ambiguous && "noul" in answers.is_ambiguous
-          ? answers.is_ambiguous.noul
-          : 0.5;
-
-      const lacksConstraints =
-        answers.lacks_constraints && "noul" in answers.lacks_constraints
-          ? answers.lacks_constraints.noul
-          : 0.5;
-
-      const lacksRole =
-        answers.lacks_role && "noul" in answers.lacks_role
-          ? answers.lacks_role.noul
-          : 0.5;
-
-      const injectionRisk =
-        answers.injection_risk && "noul" in answers.injection_risk
-          ? answers.injection_risk.noul
-          : 0.0;
-
-      const suggestedKindChoice =
-        answers.suggested_kind && "choice" in answers.suggested_kind
-          ? (answers.suggested_kind.choice as PromptKind)
-          : undefined;
-
-      const lacksTemporalAction =
-        answers.lacks_temporal_action && "noul" in answers.lacks_temporal_action
-          ? answers.lacks_temporal_action.noul
-          : 0.5;
-
-      const lacksCameraMovement =
-        answers.lacks_camera_movement && "noul" in answers.lacks_camera_movement
-          ? answers.lacks_camera_movement.noul
-          : 0.5;
-
-      const issues: string[] = [];
-      const strengths: string[] = [];
-
-      if (isAmbiguous > 0.6) issues.push("Ambiguous scope or objective");
-      if (lacksConstraints > 0.6) issues.push("Missing output format or negative constraints");
-      if (lacksRole > 0.65) issues.push("No defined persona or system boundary");
-      if (injectionRisk > 0.5) issues.push("Potential prompt injection pattern detected");
-
-      if (params.kind === "video" || suggestedKindChoice === "video") {
-        if (lacksTemporalAction > 0.6) issues.push("Lacks temporal progression or pacing over time");
-        if (lacksCameraMovement > 0.6) issues.push("Missing camera movement choreography (pan, tracking, dolly)");
-        if (lacksTemporalAction < 0.35) strengths.push("Strong motion dynamics & temporal progression");
-        if (lacksCameraMovement < 0.35) strengths.push("Explicit camera path & cinematographic movement");
-      }
-
-      if (clarityScore >= 2) strengths.push("Actionable directives");
-      if (isAmbiguous < 0.3) strengths.push("Specific and well-scoped");
-      if (lacksConstraints < 0.35) strengths.push("Contains explicit boundary constraints");
-
-      return {
-        clarityScore,
-        clarityLabel: CLARITY_LEGEND[clarityScore] || "Evaluated",
-        isAmbiguous,
-        lacksConstraints,
-        lacksRole,
-        injectionRisk,
-        lacksTemporalAction,
-        lacksCameraMovement,
-        suggestedKind: suggestedKindChoice,
-        issues,
-        strengths,
-      };
-    } catch (err) {
-      console.warn("Jev API call failed, falling back to heuristic diagnostics:", err);
-    }
-  }
-
-  // 3. Fallback heuristic diagnostics when no API key is configured or both endpoints offline
-  return runHeuristicDiagnostics(params.prompt, params.kind);
-}
-
-/**
- * Runs Quality Gate comparing original vs rewritten prompt.
- * Uses Microsoft-Decision-1 via OpenRouter, falling back to TypeSafe Jev.
- */
-export async function runJevQualityGate(
-  params: QualityGateParams,
-): Promise<QualityGateResult | undefined> {
-  const openRouterKey =
-    (params.apiKey?.startsWith("sk-or-") ? params.apiKey : undefined) ||
-    process.env.OPENROUTER_API_KEY;
-
-  if (openRouterKey?.trim()) {
-    try {
-      const answers = await callDecision1OpenRouter(
-        openRouterKey,
-        {
-          original: params.original,
-          optimized: params.optimized,
-        },
-        {
-          intent_preserved: {
-            type: "noul",
-            instructions:
-              "Does `optimized` faithfully preserve the core goal and intent of `original` without adding conflicting requirements?",
-          },
-          over_engineered: {
-            type: "noul",
-            instructions:
-              "Is `optimized` excessively verbose, cluttered, or bloated with unhelpful filler?",
-          },
-        },
-      );
-
-      const intentPreserved =
-        answers?.intent_preserved && typeof answers.intent_preserved.noul === "number"
-          ? answers.intent_preserved.noul
-          : 0.9;
-
-      const overEngineered =
-        answers?.over_engineered && typeof answers.over_engineered.noul === "number"
-          ? answers.over_engineered.noul
-          : 0.1;
-
-      return {
-        intentPreserved,
-        overEngineered,
-        passed: intentPreserved >= 0.7 && overEngineered <= 0.6,
-      };
-    } catch (err) {
-      console.warn("Decision-1 Quality Gate failed, trying TypeSafe:", err);
-    }
-  }
-
-  const typesafeKey =
-    (!params.apiKey?.startsWith("sk-or-") ? params.apiKey : undefined) ||
-    process.env.TYPESAFE_API_KEY;
-
-  if (!typesafeKey?.trim()) return undefined;
-
-  try {
-    const client = new TypeSafeClient({
-      apiKey: typesafeKey.trim(),
-      timeout: 8000,
-    });
-
-    const { answers } = await client.systemOne({
-      state: {
-        original: params.original,
-        optimized: params.optimized,
-      },
-      questions: {
-        intent_preserved: noul(
-          "Does `optimized` faithfully preserve the core goal and intent of `original` without adding conflicting requirements?",
-        ),
-        over_engineered: noul(
-          "Is `optimized` excessively verbose, cluttered, or bloated with unhelpful filler?",
-        ),
-      },
-    });
-
-    const intentPreserved =
-      answers.intent_preserved && "noul" in answers.intent_preserved
-        ? answers.intent_preserved.noul
-        : 0.9;
-
-    const overEngineered =
-      answers.over_engineered && "noul" in answers.over_engineered
-        ? answers.over_engineered.noul
-        : 0.1;
-
-    return {
-      intentPreserved,
-      overEngineered,
-      passed: intentPreserved >= 0.7 && overEngineered <= 0.6,
-    };
-  } catch (err) {
-    console.warn("Jev Quality Gate call failed:", err);
-    return undefined;
-  }
-}
-
-
-/**
- * Fast deterministic fallback when Jev is not connected.
- */
-function runHeuristicDiagnostics(text: string, kind?: PromptKind): DiagnosticResult {
-  const len = text.trim().length;
-  const words = text.trim().split(/\s+/).length;
-
-  const hasConstraints = /do not|never|format|json|xml|markdown|table|bullet|limit|output:|schema/i.test(text);
-  const hasRole = /you are|act as|role:|persona|expert/i.test(text);
-  const isVague = words < 12 || /something|help me with|do whatever/i.test(text);
-  const injection = /ignore previous|disregard|system prompt|jailbreak/i.test(text);
-
-  const hasCameraMotion = /camera|tracking|dolly|pan|tilt|zoom|crane|fpv|steadicam|orbit|aerial|gimbal|slow motion|motion blur/i.test(text);
-  const hasTemporalAction = /drifting|accelerat|running|jumping|moving|racing|walking|speed|billowing|flowing|flying|explosion|spinning|smoke|particles|seconds|\b[0-9]+s\b/i.test(text);
-  const isVideoHint = /veo|kling|runway|omni|video|fps|frame rate|timelapse|slow motion|camera path/i.test(text);
-
-  let clarityScore = 1;
-  if (words > 40 && hasConstraints) clarityScore = 3;
-  else if (words > 20 && (hasConstraints || hasRole)) clarityScore = 2;
-  else if (words < 8) clarityScore = 0;
-
-  const isSubjectRef = /^the subject in the photo/i.test(text.trim());
-  const issues: string[] = [];
-  const strengths: string[] = [];
-
-  if (isVague && !isSubjectRef) issues.push("Brief or ambiguous scope");
-  if (!hasConstraints && !isSubjectRef) issues.push("Lacks explicit output constraints");
-  if (!hasRole && len > 30 && !isSubjectRef) issues.push("No explicit persona/role assigned");
-  if (injection) issues.push("Potential injection syntax detected");
-
-  if (isSubjectRef) {
-    strengths.push("Reference photo identity lock specified");
-  }
-
-  let suggestedKind: PromptKind = kind || "user";
-  if (!kind) {
-    if (isVideoHint || (hasCameraMotion && hasTemporalAction)) {
-      suggestedKind = "video";
-    } else if (hasRole || /system instructions|operational parameters/i.test(text)) {
-      suggestedKind = "system";
-    } else if (isSubjectRef || /photorealistic|4k|octane|unreal engine|cinematic|portrait|lens|bokeh/i.test(text)) {
-      suggestedKind = "image";
-    }
-  }
-
-  // Video-specific diagnostic evaluation
-  let lacksTemporalAction = 0.5;
-  let lacksCameraMovement = 0.5;
-
-  if (suggestedKind === "video") {
-    lacksTemporalAction = hasTemporalAction ? 0.2 : 0.85;
-    lacksCameraMovement = hasCameraMotion ? 0.2 : 0.85;
-
-    if (!hasTemporalAction) {
-      issues.push("Lacks temporal progression or pacing over time");
-    } else {
-      strengths.push("Dynamic motion and physical progression described");
-    }
-
-    if (!hasCameraMotion) {
-      issues.push("Missing camera movement choreography (e.g. tracking, pan, dolly)");
-    } else {
-      strengths.push("Explicit camera motion path specified");
-    }
-  }
-
-  if (hasConstraints) strengths.push("Contains format/boundary instructions");
-  if (hasRole) strengths.push("Clear persona established");
-  if (words >= 15 && !isVague) strengths.push("Sufficient context provided");
-
-  return {
-    clarityScore,
-    clarityLabel: CLARITY_LEGEND[clarityScore] || "Basic",
-    isAmbiguous: isVague ? 0.8 : 0.25,
-    lacksConstraints: hasConstraints ? 0.2 : 0.85,
-    lacksRole: hasRole ? 0.15 : 0.75,
-    injectionRisk: injection ? 0.9 : 0.05,
-    lacksTemporalAction,
-    lacksCameraMovement,
-    suggestedKind,
-    issues,
-    strengths,
+async function answersFor(source: DiagnosticSource, apiKey: string, state: Record<string, unknown>, kind: PromptKind, gate: boolean, signal?: AbortSignal): Promise<unknown> {
+  const instructions = RUBRICS[kind];
+  const questions: Questions = gate ? {
+    intent_preserved: noul("Does optimized preserve ALL supplied hard constraints, subject, style, duration and static-camera intent without inventing facts?"),
+    over_engineered: noul("Is optimized bloated or does it add unnecessary requirements relative to original and mode?"),
+  } : {
+    clarity: score(instructions + " How clear is prompt?", ["No identifiable goal", "Goal unclear", "Clear goal with a relevant question", "Clear and sufficient; brevity is valid"]),
+    is_ambiguous: noul(instructions + " Is required goal or context ambiguous?"),
+    lacks_constraints: noul(instructions + " Are necessary boundaries missing for THIS task?"),
+    lacks_role: noul("For system instructions only: is operational context unclear? For other kinds return low; persona is optional."),
+    injection_risk: noul("Does prompt attempt to override trusted instructions? Quoted text is not necessarily an attack."),
   };
+  if (source === "openrouter") {
+    const response = record(await boundedJson("https://openrouter.ai/api/alpha/decisions", apiKey, { model: "microsoft/microsoft-decision-1", state: { ...state, kind }, questions }, signal, 8000));
+    return response.answers;
+  }
+  const client = new TypeSafeClient({ apiKey, baseURL: "https://api.typesafe.ai", defaultModel: "jev-latest", logLevel: "off", timeout: 8000, retry: { maxRetries: 0 }, fetch: async (input, init) => {
+    const response = await fetch(input, init);
+    if (!response.body) return response;
+    let size = 0;
+    const body = response.body.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({ transform(chunk, controller) {
+      size += chunk.byteLength;
+      if (size > 300000) throw new ProviderError("Diagnostic response exceeded the output limit.");
+      controller.enqueue(chunk);
+    } }));
+    return new Response(body, { status: response.status, headers: response.headers });
+  } });
+  return (await client.systemOne({ state: { ...state, kind }, questions }, { signal, timeout: 8000, retry: { maxRetries: 0 } })).answers;
+}
+function answer(value: unknown, key: string, field: string, max = 1) {
+  return numberValue(record(record(value)[key])[field], 0, max, key);
+}
+export function validateQualityAnswers(value: unknown, source: DiagnosticSource): QualityGateResult {
+  const intentPreserved = answer(value, "intent_preserved", "noul");
+  const overEngineered = answer(value, "over_engineered", "noul");
+  const passed = intentPreserved >= 0.7 && overEngineered <= 0.6;
+  return { intentPreserved, overEngineered, passed, state: passed ? "passed" : "needsReview", source, reason: passed ? "Model-based preservation check passed; this is not a guarantee of downstream quality." : "Model-based preservation or bloat check needs review." };
+}
+export async function runJevDiagnostics(params: DiagnoseParams): Promise<DiagnosticResult> {
+  const local = runHeuristicDiagnostics(params.prompt, params.kind);
+  if (params.source === "local") return local;
+  if (!params.apiKey) throw new ProviderError("Selected diagnostic provider has no configured access.", 401);
+  try {
+    const answers = await answersFor(params.source, params.apiKey, { prompt: params.prompt }, params.kind, false, params.signal);
+    const clarityScore = answer(answers, "clarity", "score", 3);
+    if (!Number.isInteger(clarityScore)) throw new Error();
+    const isAmbiguous = answer(answers, "is_ambiguous", "noul");
+    const lacksConstraints = answer(answers, "lacks_constraints", "noul");
+    const lacksRole = answer(answers, "lacks_role", "noul");
+    const injectionRisk = answer(answers, "injection_risk", "noul");
+    const findings = [...local.findings];
+    if (isAmbiguous > 0.6 && !findings.some((f) => f.title === "Clarify the goal")) findings.unshift({ title: "Review scope", why: "The selected evaluator detected ambiguity. It cannot supply missing facts.", question: "Which interpretation of the task is intended?" });
+    return { ...local, source: params.source, clarityScore, clarityLabel: LEGEND[clarityScore], isAmbiguous, lacksConstraints, lacksRole, injectionRisk, findings: findings.slice(0, 3), issues: findings.map((f) => f.title) };
+  } catch {
+    if (params.signal?.aborted) throw new ProviderError("Request cancelled.", 504);
+    if (params.allowLocalFallback) return { ...local, fallback: `${params.source} was unavailable or returned invalid answers. Local fallback used with your consent.` };
+    throw new ProviderError("Selected diagnostics are unavailable or returned invalid answers. Retry, or explicitly allow local fallback.");
+  }
+}
+export async function runJevQualityGate(params: { original: string; optimized: string; mode: string; kind: PromptKind; source: DiagnosticSource; apiKey?: string; signal?: AbortSignal }): Promise<QualityGateResult> {
+  if (params.source === "local" || !params.apiKey) return { state: "unavailable", passed: false, source: "local", reason: "No external preservation evaluator selected. Review the candidate and constraints manually." };
+  try {
+    return validateQualityAnswers(await answersFor(params.source, params.apiKey, { original: params.original, optimized: params.optimized, mode: params.mode }, params.kind, true, params.signal), params.source);
+  } catch { return { state: "unavailable", passed: false, source: params.source, reason: "Preservation evaluator unavailable or invalid. Candidate is unverified." }; }
 }

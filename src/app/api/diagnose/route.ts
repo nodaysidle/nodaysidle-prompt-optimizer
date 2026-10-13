@@ -1,39 +1,11 @@
-import { NextRequest, NextResponse } from "next/server";
 import { runJevDiagnostics } from "@/lib/jev";
-import type { PromptKind } from "@/lib/types";
-
-export async function POST(req: NextRequest) {
+import { validateDomain } from "@/lib/validation";
+import { resolveKey } from "@/lib/server/access";
+import { readBody, routeError } from "@/lib/server/route";
+export async function POST(req: Request) {
   try {
-    const body = await req.json();
-    const { prompt, kind } = body as {
-      prompt: string;
-      kind?: PromptKind;
-    };
-
-    if (!prompt?.trim()) {
-      return NextResponse.json(
-        { error: "Prompt is required." },
-        { status: 400 },
-      );
-    }
-
-    const openrouterKey =
-      req.headers.get("x-openrouter-key")?.trim() ||
-      process.env.OPENROUTER_API_KEY?.trim();
-
-    const typesafeKey =
-      req.headers.get("x-typesafe-key")?.trim() ||
-      process.env.TYPESAFE_API_KEY?.trim();
-
-    const diagnostics = await runJevDiagnostics({
-      prompt: prompt.trim(),
-      kind,
-      apiKey: openrouterKey || typesafeKey,
-    });
-
-    return NextResponse.json(diagnostics);
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : "Diagnostic evaluation failed.";
-    return NextResponse.json({ error: msg }, { status: 500 });
-  }
+    const domain = validateDomain(await readBody(req));
+    const apiKey = domain.diagnosticSource === "local" ? undefined : resolveKey(req, domain.diagnosticSource);
+    return Response.json(await runJevDiagnostics({ ...domain, source: domain.diagnosticSource, apiKey, signal: req.signal }), { headers: { "Cache-Control": "no-store" } });
+  } catch (error) { return routeError(error); }
 }

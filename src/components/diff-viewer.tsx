@@ -41,11 +41,11 @@ export function DiffViewer({ original, optimized, className }: DiffViewerProps) 
         <div className="flex items-center gap-3 font-mono">
           <span className="inline-flex items-center gap-1.5 text-emerald-400 font-medium">
             <span className="h-2 w-2 rounded-full bg-emerald-400" />
-            +{additions} words added (instructions & constraints)
+            +{additions} words added
           </span>
           <span className="inline-flex items-center gap-1.5 text-rose-400 font-medium">
             <span className="h-2 w-2 rounded-full bg-rose-400" />
-            -{deletions} words trimmed (filler & vagueness)
+            -{deletions} words removed
           </span>
         </div>
         <span className="text-[11px] text-muted-fg">
@@ -69,7 +69,7 @@ export function DiffViewer({ original, optimized, className }: DiffViewerProps) 
             return (
               <span
                 key={index}
-                className="rounded bg-rose-950/60 text-rose-300/80 line-through px-1 py-0.5 border border-rose-900/40 opacity-70"
+                className="rounded bg-rose-950 text-rose-200 line-through px-1 py-0.5 border border-rose-900"
               >
                 {part.value}
               </span>

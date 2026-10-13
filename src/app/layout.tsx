@@ -21,7 +21,7 @@ export const metadata: Metadata = {
     template: "%s · NODAYSIDLE Prompt Optimizer",
   },
   description:
-    "Production prompt engineering workbench powered by DeepSeek Platform Flash API and TypeSafe Jev System One diagnostics.",
+    "Preservation-first prompt workbench with local diagnostics, optional external evaluation, and paired text tests.",
   keywords: ["prompt optimizer", "DeepSeek", "TypeSafe Jev", "system prompt", "LLM prompts"],
 };
 

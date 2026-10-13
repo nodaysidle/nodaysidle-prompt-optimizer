@@ -22,7 +22,13 @@ export const metadata: Metadata = {
   },
   description:
     "Preservation-first prompt workbench with local diagnostics, optional external evaluation, and paired text tests.",
-  keywords: ["prompt optimizer", "DeepSeek", "TypeSafe Jev", "system prompt", "LLM prompts"],
+  keywords: [
+    "prompt optimizer",
+    "DeepSeek",
+    "TypeSafe Jev",
+    "system prompt",
+    "LLM prompts",
+  ],
 };
 
 export default function RootLayout({

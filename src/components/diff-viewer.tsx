@@ -10,7 +10,11 @@ interface DiffViewerProps {
   className?: string;
 }
 
-export function DiffViewer({ original, optimized, className }: DiffViewerProps) {
+export function DiffViewer({
+  original,
+  optimized,
+  className,
+}: DiffViewerProps) {
   const { changes, additions, deletions } = useMemo(() => {
     if (!original && !optimized) {
       return { changes: [] as Change[], additions: 0, deletions: 0 };
@@ -40,17 +44,15 @@ export function DiffViewer({ original, optimized, className }: DiffViewerProps) 
       <div className="flex flex-wrap items-center justify-between gap-3 text-xs border-b border-border/80 pb-2.5">
         <div className="flex items-center gap-3 font-mono">
           <span className="inline-flex items-center gap-1.5 text-emerald-400 font-medium">
-            <span className="h-2 w-2 rounded-full bg-emerald-400" />
-            +{additions} words added
+            <span className="h-2 w-2 rounded-full bg-emerald-400" />+{additions}{" "}
+            words added
           </span>
           <span className="inline-flex items-center gap-1.5 text-rose-400 font-medium">
-            <span className="h-2 w-2 rounded-full bg-rose-400" />
-            -{deletions} words removed
+            <span className="h-2 w-2 rounded-full bg-rose-400" />-{deletions}{" "}
+            words removed
           </span>
         </div>
-        <span className="text-[11px] text-muted-fg">
-          Word-by-word diff
-        </span>
+        <span className="text-[11px] text-muted-fg">Word-by-word diff</span>
       </div>
 
       <div className="max-h-[420px] overflow-auto rounded-xl border border-border bg-background/60 p-4 font-mono text-sm leading-relaxed whitespace-pre-wrap select-text">
@@ -75,7 +77,11 @@ export function DiffViewer({ original, optimized, className }: DiffViewerProps) 
               </span>
             );
           }
-          return <span key={index} className="text-foreground">{part.value}</span>;
+          return (
+            <span key={index} className="text-foreground">
+              {part.value}
+            </span>
+          );
         })}
       </div>
     </div>

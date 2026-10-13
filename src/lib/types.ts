@@ -2,12 +2,24 @@ export const PROMPT_KINDS = ["user", "system", "image", "video"] as const;
 export type PromptKind = (typeof PROMPT_KINDS)[number];
 export const MODES = ["minimal", "structured", "creative"] as const;
 export type OptimizationMode = (typeof MODES)[number];
-export const ENGINE_TARGETS = ["universal", "midjourney", "flux", "sd", "veo", "kling", "runway"] as const;
+export const ENGINE_TARGETS = [
+  "universal",
+  "midjourney",
+  "flux",
+  "sd",
+  "veo",
+  "kling",
+  "runway",
+] as const;
 export type EngineTarget = (typeof ENGINE_TARGETS)[number];
 export const MODELS = ["deepseek-flash", "deepseek-v4-pro"] as const;
 export type Model = (typeof MODELS)[number];
 export type DiagnosticSource = "local" | "openrouter" | "typesafe";
-export interface Finding { title: string; why: string; question: string; }
+export interface Finding {
+  title: string;
+  why: string;
+  question: string;
+}
 export interface DiagnosticResult {
   source: DiagnosticSource;
   fallback?: string;
@@ -36,7 +48,11 @@ export interface CompletionResult {
   content: string;
   model: string;
   elapsedMs: number;
-  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+  usage?: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  };
 }
 export interface DraftSnapshot {
   prompt: string;
@@ -77,8 +93,19 @@ export interface AppSettings {
   rememberKeys: boolean;
 }
 export const DEFAULT_SETTINGS: AppSettings = {
-  deepseekApiKey: "", deepseekModel: "deepseek-flash", typesafeApiKey: "",
-  openrouterApiKey: "", appAccessToken: "", autoDiagnose: true,
-  diagnosticSource: "local", allowLocalFallback: false, rememberKeys: false,
+  deepseekApiKey: "",
+  deepseekModel: "deepseek-flash",
+  typesafeApiKey: "",
+  openrouterApiKey: "",
+  appAccessToken: "",
+  autoDiagnose: true,
+  diagnosticSource: "local",
+  allowLocalFallback: false,
+  rememberKeys: false,
 };
-export interface ServerConfig { sharedAccess: boolean; deepseek: boolean; openrouter: boolean; typesafe: boolean; }
+export interface ServerConfig {
+  sharedAccess: boolean;
+  deepseek: boolean;
+  openrouter: boolean;
+  typesafe: boolean;
+}

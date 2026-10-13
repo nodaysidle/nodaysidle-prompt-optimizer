@@ -13,7 +13,8 @@ export const PROMPT_EXAMPLES: PromptExample[] = [
     title: "Veo 3.1 Supermoto Drift",
     engineTarget: "veo",
     kind: "video",
-    description: "Temporal drift with tire smoke and camera tracking in Trieste",
+    description:
+      "Temporal drift with tire smoke and camera tracking in Trieste",
     prompt: `A young man power-sliding a matte black 2008 Honda CRF450R supermoto motorcycle full throttle sideways across a sun-baked cobblestone piazza in Trieste Italy with Adriatic Sea background, tire smoke billowing, pedestrian crowd reacting in awe, harsh midday sun, photorealistic Canon EOS R5.`,
   },
   {

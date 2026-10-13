@@ -5,7 +5,20 @@ import { readBody, routeError } from "@/lib/server/route";
 export async function POST(req: Request) {
   try {
     const domain = validateDomain(await readBody(req));
-    const apiKey = domain.diagnosticSource === "local" ? undefined : resolveKey(req, domain.diagnosticSource);
-    return Response.json(await runJevDiagnostics({ ...domain, source: domain.diagnosticSource, apiKey, signal: req.signal }), { headers: { "Cache-Control": "no-store" } });
-  } catch (error) { return routeError(error); }
+    const apiKey =
+      domain.diagnosticSource === "local"
+        ? undefined
+        : resolveKey(req, domain.diagnosticSource);
+    return Response.json(
+      await runJevDiagnostics({
+        ...domain,
+        source: domain.diagnosticSource,
+        apiKey,
+        signal: req.signal,
+      }),
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  } catch (error) {
+    return routeError(error);
+  }
 }

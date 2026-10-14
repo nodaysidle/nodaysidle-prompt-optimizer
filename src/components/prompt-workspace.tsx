@@ -2,7 +2,6 @@
 
 import {
   AlertCircle,
-  ArrowRight,
   Camera,
   Check,
   CheckCircle,
@@ -11,8 +10,6 @@ import {
   GitCompare,
   History,
   ImageIcon,
-  KeyRound,
-  Lightbulb,
   Loader2,
   MessageSquare,
   Play,
@@ -32,7 +29,6 @@ import type {
   PromptHistoryItem,
   PromptKind,
 } from "@/lib/types";
-import { PROMPT_EXAMPLES, PromptExample } from "@/lib/examples";
 import { cn } from "@/lib/cn";
 import { isSubjectInPhotoPrompt } from "@/lib/optimizer-prompt";
 import { loadHistory, saveHistoryItem } from "@/lib/storage";
@@ -268,14 +264,6 @@ export function PromptWorkspace() {
     setHistoryOpen(false);
   }
 
-  function loadExample(example: PromptExample) {
-    setPrompt(example.prompt);
-    setKind(example.kind);
-    setEngineTarget("universal");
-    setResult(null);
-    setError(null);
-    fetchDiagnostics(example.prompt, example.kind);
-  }
 
   async function copyText(text: string, isOpt: boolean, isNeg = false) {
     await navigator.clipboard.writeText(text);
@@ -307,20 +295,6 @@ export function PromptWorkspace() {
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-3">
             <BrandMark className="size-6" />
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold tracking-tight text-foreground">
-                Prompt Optimizer
-              </span>
-              <span className="rounded-full border border-border bg-surface-muted px-2 py-0.5 text-[10px] font-medium text-muted-fg">
-                NODAYSIDLE
-              </span>
-              <span className="hidden sm:inline-flex rounded-full border border-violet-800/60 bg-violet-950/60 px-2 py-0.5 text-[10px] font-medium text-violet-300">
-                DeepSeek Flash
-              </span>
-              <span className="hidden md:inline-flex rounded-full border border-emerald-800/60 bg-emerald-950/60 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
-                TypeSafe Jev
-              </span>
-            </div>
           </div>
 
           <div className="flex items-center gap-2">
@@ -356,88 +330,6 @@ export function PromptWorkspace() {
       </header>
 
       <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-6 sm:px-6">
-        {/* Friendly Hero Banner */}
-        <section className="rounded-2xl border border-border bg-gradient-to-br from-surface to-surface-muted p-5 shadow-sm">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
-                <span>Transform rough prompts into production-grade instructions</span>
-              </h2>
-              <p className="mt-1 text-xs text-muted-fg max-w-2xl leading-relaxed">
-                Paste your draft below to get an <strong>instant health check</strong> on what&apos;s missing (boundaries, output formatting, or clear roles). Then generate a structured rewrite powered by DeepSeek Flash.
-              </p>
-            </div>
-
-            {/* Step Roadmap */}
-            <div className="hidden lg:flex items-center gap-2 text-[11px] text-muted-fg bg-background/60 border border-border/80 px-3 py-2 rounded-xl">
-              <span className="flex items-center gap-1 text-foreground font-medium">
-                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-accent/20 text-accent font-mono text-[10px]">1</span>
-                Draft
-              </span>
-              <ArrowRight className="h-3 w-3 text-muted-fg/60" />
-              <span className="flex items-center gap-1 text-foreground font-medium">
-                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-accent/20 text-accent font-mono text-[10px]">2</span>
-                Audit
-              </span>
-              <ArrowRight className="h-3 w-3 text-muted-fg/60" />
-              <span className="flex items-center gap-1 text-foreground font-medium">
-                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-accent/20 text-accent font-mono text-[10px]">3</span>
-                Optimize & Test
-              </span>
-            </div>
-          </div>
-
-          {/* Quick Setup Hint (if key not entered) */}
-          {!settings.deepseekApiKey && (
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-800/40 bg-amber-950/20 px-3.5 py-2.5 text-xs text-amber-200">
-              <div className="flex items-center gap-2">
-                <KeyRound className="h-4 w-4 text-amber-400 shrink-0" />
-                <span>
-                  <strong>Tip:</strong> Add your DeepSeek API key in Settings to unlock 1-click optimization (~$0.001 per run). You can also click any example below to try the live health audit right now!
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSettingsOpen(true)}
-                className="rounded-lg bg-amber-400/90 px-3 py-1 font-semibold text-zinc-950 hover:bg-amber-300 text-xs transition shrink-0"
-              >
-                Configure Key
-              </button>
-            </div>
-          )}
-        </section>
-
-        {/* 1-Click Example Presets */}
-        <section className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted-fg flex items-center gap-1.5">
-              <Lightbulb className="h-3.5 w-3.5 text-accent" />
-              Click an example to test:
-            </span>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-            {PROMPT_EXAMPLES.map((ex, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => loadExample(ex)}
-                className="group flex flex-col items-start rounded-xl border border-border bg-surface/60 p-3 text-left hover:border-accent/60 hover:bg-surface-muted transition text-xs"
-              >
-                <div className="flex w-full items-center justify-between">
-                  <span className="font-semibold text-foreground group-hover:text-accent transition">
-                    {ex.title}
-                  </span>
-                  <span className="rounded bg-background px-1.5 py-0.5 text-[10px] font-mono text-muted-fg uppercase border border-border/80">
-                    {ex.kind}
-                  </span>
-                </div>
-                <p className="mt-1 text-[11px] text-muted-fg line-clamp-1">
-                  {ex.description}
-                </p>
-              </button>
-            ))}
-          </div>
-        </section>
 
         {/* Prompt Input & Kind Selection */}
         <section className="space-y-3.5">
@@ -666,15 +558,8 @@ export function PromptWorkspace() {
                 onClick={handleOptimize}
                 className="inline-flex items-center gap-2 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-accent-foreground shadow-md hover:bg-accent-strong disabled:opacity-40 transition cursor-pointer"
               >
-                {loading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Sparkles className="h-4 w-4" />
-                )}
-                <span>Optimize with DeepSeek</span>
-                <span className="text-[11px] font-normal opacity-85 hidden sm:inline">
-                  (~1.5s)
-                </span>
+                {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+                <span>optimize</span>
               </button>
 
               {prompt.trim().length > 0 && (
@@ -815,8 +700,7 @@ export function PromptWorkspace() {
               <div className="flex items-center justify-between border-b border-accent/20 px-4 py-3">
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
-                      <Sparkles className="h-4 w-4 text-accent" />
+                    <h3 className="text-sm font-semibold text-foreground">
                       Optimized Prompt
                     </h3>
                     {result?.qualityGate && (
@@ -825,9 +709,6 @@ export function PromptWorkspace() {
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-muted-fg">
-                    {result ? "Production-ready rewrite" : "Click Optimize to generate"}
-                  </p>
                 </div>
 
                 <div className="flex items-center gap-1">
@@ -858,11 +739,7 @@ export function PromptWorkspace() {
               </div>
 
               <pre className="flex-1 overflow-auto whitespace-pre-wrap p-4 font-mono text-sm leading-relaxed text-foreground">
-                {result?.optimized || (
-                  <span className="text-muted-fg/70">
-                    Your upgraded prompt will appear here with strict boundary constraints, schema guidelines, and negative criteria.
-                  </span>
-                )}
+                {result?.optimized || ""}
               </pre>
             </div>
           </section>
@@ -958,9 +835,6 @@ export function PromptWorkspace() {
         <div className="mx-auto flex max-w-6xl flex-col sm:flex-row items-center justify-between gap-3 px-4 sm:px-6 text-xs text-muted-fg">
           <div className="flex items-center gap-2">
             <BrandMark className="size-4" />
-            <span>
-              Part of the <strong className="text-foreground">NODAYSIDLE</strong> workspace · DeepSeek Flash + TypeSafe Jev
-            </span>
           </div>
           <a
             href="https://github.com/nodaysidle/nodaysidle-prompt-optimizer"

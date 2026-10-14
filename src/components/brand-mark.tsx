@@ -3,18 +3,18 @@ export function BrandMark({ className = "size-6" }: { className?: string }) {
   return (
     <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
       <defs>
-        <linearGradient id="brand-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#818cf8" />
-          <stop offset="100%" stopColor="#4f46e5" />
+        <linearGradient id="silver-brand-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#ffffff" />
+          <stop offset="30%" stopColor="#e2e8f0" />
+          <stop offset="70%" stopColor="#94a3b8" />
+          <stop offset="100%" stopColor="#cbd5e1" />
         </linearGradient>
       </defs>
-      <rect width="64" height="64" rx="16" fill="url(#brand-grad)" />
+      <rect width="64" height="64" rx="14" fill="#000000" />
       <path
-        d="M32 14 L35.5 25.5 L47 29 L35.5 32.5 L32 44 L28.5 32.5 L17 29 L28.5 25.5 Z"
-        fill="#ffffff"
+        d="M18 47V17h7.5l13.5 20.25V17H46v30h-7.5L25 26.75V47H18z"
+        fill="url(#silver-brand-grad)"
       />
-      <circle cx="46" cy="18" r="3" fill="#ffffff" />
-      <circle cx="20" cy="42" r="2.5" fill="#ffffff" opacity="0.8" />
     </svg>
   );
 }

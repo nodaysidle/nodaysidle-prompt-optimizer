@@ -8,6 +8,7 @@ import {
   Copy,
   Eye,
   GitCompare,
+  HelpCircle,
   History,
   ImageIcon,
   Loader2,
@@ -122,9 +123,6 @@ export function PromptWorkspace() {
           headers: {
             "Content-Type": "application/json",
             "x-openrouter-key": settings.openrouterApiKey || "",
-            "x-typesafe-key": settings.typesafeApiKey || "",
-            "x-preferred-engine": settings.preferredEngine || "auto",
-            "x-typesafe-model": settings.typesafeModel || "jev-preview",
           },
           body: JSON.stringify({ prompt: trimmed, kind: targetKind }),
         });
@@ -138,12 +136,7 @@ export function PromptWorkspace() {
         setDiagnosing(false);
       }
     },
-    [
-      settings.typesafeApiKey,
-      settings.openrouterApiKey,
-      settings.preferredEngine,
-      settings.typesafeModel,
-    ],
+    [settings.openrouterApiKey],
   );
 
   // Debounced auto-diagnose on typing
@@ -179,7 +172,6 @@ export function PromptWorkspace() {
           "Content-Type": "application/json",
           "x-deepseek-key": settings.deepseekApiKey || "",
           "x-openrouter-key": settings.openrouterApiKey || "",
-          "x-typesafe-key": settings.typesafeApiKey || "",
         },
         body: JSON.stringify({
           prompt: trimmed,
@@ -549,7 +541,7 @@ export function PromptWorkspace() {
             </div>
           </div>
 
-          {/* Live Jev System One Health Audit */}
+          {/* Live prompt health audit */}
           <DiagnosticsPanel
             diagnostics={diagnostics}
             loading={diagnosing}
@@ -745,6 +737,16 @@ export function PromptWorkspace() {
                 </div>
               </div>
 
+              {result?.suggestedKind && (
+                <button
+                  type="button"
+                  onClick={() => result?.suggestedKind && setKind(result.suggestedKind)}
+                  className="mx-4 mt-3 self-start rounded-lg border border-amber-500/40 bg-amber-950/30 px-3 py-1.5 text-xs text-amber-200 hover:bg-amber-900/60 transition cursor-pointer"
+                >
+                  Diagnostics suggest this looks like a {result.suggestedKind} prompt — click to retag Step 1
+                </button>
+              )}
+
               <pre className="flex-1 overflow-auto whitespace-pre-wrap p-4 font-mono text-sm leading-relaxed text-foreground">
                 {result?.optimized || ""}
               </pre>
@@ -792,6 +794,29 @@ export function PromptWorkspace() {
         )}
 
         {/* Transformation Insights (What Changed) */}
+        {result?.unresolvedQuestions && result.unresolvedQuestions.length > 0 && (
+          <section className="rounded-xl border border-amber-500/30 bg-amber-950/15 p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <HelpCircle className="h-4 w-4 text-amber-400 shrink-0" />
+              <div>
+                <h4 className="text-xs font-semibold text-amber-200">
+                    Open Questions (details the optimizer can&apos;t invent for you)
+                </h4>
+                <p className="text-[11px] text-amber-300/70">
+                  Answer these in your prompt yourself — the rewrite intentionally did not fill them in.
+                </p>
+              </div>
+            </div>
+            <ul className="space-y-1.5">
+              {result.unresolvedQuestions.map((q, i) => (
+                <li key={i} className="rounded-lg bg-background/50 px-3 py-2 text-xs text-amber-100/90">
+                  {q}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
         {result && (
           <section className="space-y-4 rounded-xl border border-border bg-surface/50 p-5">
             <div>
@@ -825,12 +850,33 @@ export function PromptWorkspace() {
 
             {result.qualityGate && (
               <div className="rounded-lg border border-border bg-background/60 p-3 text-xs text-muted-fg">
-                <span className="font-semibold text-foreground">Quality Verification: </span>
-                Core task intent preserved at{" "}
-                <span className="font-mono text-emerald-400 font-bold">
-                  {Math.round(result.qualityGate.intentPreserved * 100)}%
-                </span>
-                . Zero harmful domain drift detected.
+                {result.qualityGate.passed ? (
+                  <>
+                    <span className="font-semibold text-foreground">Quality Verification: </span>
+                    Core task intent preserved at{" "}
+                    <span className="font-mono text-emerald-400 font-bold">
+                      {Math.round(result.qualityGate.intentPreserved * 100)}%
+                    </span>
+                    . Verbosity risk:{" "}
+                    <span className="font-mono text-emerald-400 font-bold">
+                      {Math.round(result.qualityGate.overEngineered * 100)}%
+                    </span>
+                    .
+                  </>
+                ) : (
+                  <>
+                    <span className="font-semibold text-amber-300">Quality gate flagged this rewrite: </span>
+                    intent match{" "}
+                    <span className="font-mono text-amber-300 font-bold">
+                      {Math.round(result.qualityGate.intentPreserved * 100)}%
+                    </span>{" "}
+                    · verbosity risk{" "}
+                    <span className="font-mono text-amber-300 font-bold">
+                      {Math.round(result.qualityGate.overEngineered * 100)}%
+                    </span>
+                    . A repaired rewrite also failed verification, so your original prompt is preserved unchanged.
+                  </>
+                )}
               </div>
             )}
           </section>

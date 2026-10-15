@@ -10,6 +10,7 @@ export interface DeepSeekChatParams {
   jsonMode?: boolean;
   temperature?: number;
   timeoutMs?: number;
+  maxTokens?: number;
 }
 
 async function callChatCompletion(params: {
@@ -20,6 +21,7 @@ async function callChatCompletion(params: {
   jsonMode?: boolean;
   temperature?: number;
   timeoutMs?: number;
+  maxTokens?: number;
 }): Promise<string> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), params.timeoutMs ?? 15000);
@@ -28,6 +30,7 @@ async function callChatCompletion(params: {
       model: params.model,
       temperature: params.temperature ?? 0.3,
       messages: params.messages,
+      max_tokens: params.maxTokens ?? 2048,
     };
 
     if (params.jsonMode) {
@@ -62,8 +65,8 @@ async function callChatCompletion(params: {
       } catch {
         msg = `API error (${res.status}): ${errText.slice(0, 300)}`;
       }
-      const err = new Error(msg);
-      (err as any).status = res.status;
+      const err = new Error(msg) as Error & { status: number };
+      err.status = res.status;
       throw err;
     }
 

@@ -21,8 +21,8 @@ export const metadata: Metadata = {
     template: "%s · NODAYSIDLE Prompt Optimizer",
   },
   description:
-    "Production prompt engineering workbench powered by DeepSeek Platform Flash API and TypeSafe Jev System One diagnostics.",
-  keywords: ["prompt optimizer", "DeepSeek", "TypeSafe Jev", "system prompt", "LLM prompts"],
+    "Production prompt engineering workbench powered by DeepSeek Platform Flash API and Microsoft-Decision-1 diagnostics.",
+  keywords: ["prompt optimizer", "DeepSeek", "Microsoft-Decision-1", "system prompt", "LLM prompts"],
 };
 
 export default function RootLayout({

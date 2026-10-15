@@ -1,0 +1,154 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { optimizePrompt } from "@/lib/providers/chat";
+import type { DiagnosticResult } from "@/lib/types";
+
+vi.mock("@/lib/providers/deepseek", () => ({
+  chatDeepSeek: vi.fn(),
+}));
+
+vi.mock("@/lib/decisions", () => ({
+  runDiagnostics: vi.fn(),
+  runQualityGate: vi.fn(),
+}));
+
+import { chatDeepSeek } from "@/lib/providers/deepseek";
+import { runDiagnostics, runQualityGate } from "@/lib/decisions";
+
+const mockedChat = vi.mocked(chatDeepSeek);
+const mockedGate = vi.mocked(runQualityGate);
+const mockedDiagnostics = vi.mocked(runDiagnostics);
+
+const baseDiagnostics: DiagnosticResult = {
+  clarityScore: 2,
+  clarityLabel: "Clear instructions / Good constraints",
+  isAmbiguous: 0.2,
+  lacksConstraints: 0.2,
+  lacksRole: 0.5,
+  injectionRisk: 0,
+  issues: [],
+  strengths: [],
+  unresolvedQuestions: [],
+  engine: "test",
+};
+
+const rewritePayload = (optimized: string, extras: Record<string, unknown> = {}) =>
+  JSON.stringify({ optimized, questions: [], summary: "Improved.", changes: ["x"], ...extras });
+
+function responseJson(optimized: string) {
+  return rewritePayload(optimized);
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockedDiagnostics.mockResolvedValue(baseDiagnostics);
+});
+
+describe("optimizePrompt pipeline", () => {
+  it("returns the first candidate when verification passes", async () => {
+    mockedChat.mockResolvedValue(responseJson("A crisp rewrite of the task."));
+    mockedGate.mockResolvedValue({ intentPreserved: 0.95, overEngineered: 0.1, passed: true });
+
+    const result = await optimizePrompt({
+      prompt: "Explain closures with one example.",
+      kind: "user",
+      deepseekApiKey: "sk-test",
+      openrouterApiKey: "sk-or-test",
+    });
+
+    expect(result.optimized).toBe("A crisp rewrite of the task.");
+    expect(mockedChat).toHaveBeenCalledTimes(1);
+    expect(mockedGate).toHaveBeenCalledTimes(1);
+  });
+
+  it("repairs exactly once when verification fails, then succeeds", async () => {
+    mockedChat
+      .mockResolvedValueOnce(responseJson("Rewrite drop idea drop number 555."))
+      .mockResolvedValueOnce(responseJson("Rewrite that preserves requirement 555."));
+    mockedGate
+      .mockResolvedValueOnce({ intentPreserved: 0.4, overEngineered: 0.2, passed: false })
+      .mockResolvedValueOnce({ intentPreserved: 0.9, overEngineered: 0.1, passed: true });
+
+    const result = await optimizePrompt({
+      prompt: "Rewrite that keeps requirement 555.",
+      kind: "user",
+      deepseekApiKey: "sk-test",
+      openrouterApiKey: "sk-or-test",
+    });
+
+    expect(mockedChat).toHaveBeenCalledTimes(2);
+    expect(result.optimized).toContain("555");
+    expect(result.qualityGate?.passed ?? false).toBe(true);
+    const secondCall = mockedChat.mock.calls[1][0];
+    expect(secondCall.system).toContain("QUALITY REPAIR PASS");
+  });
+
+  it("preserves the original prompt when repair also fails", async () => {
+    const original = "Do a full pass on my landing page copy.";
+    mockedChat.mockResolvedValue(responseJson("An expanded corporate-deck rewrite bloated with filler."));
+    mockedGate.mockResolvedValue({ intentPreserved: 0.4, overEngineered: 0.8, passed: false });
+
+    const result = await optimizePrompt({
+      prompt: original,
+      kind: "user",
+      deepseekApiKey: "sk-test",
+      openrouterApiKey: "sk-or-test",
+    });
+
+    expect(result.optimized).toBe(original);
+    expect(result.changes).toEqual([]);
+    expect(result.summary).toContain("preserved unchanged");
+    expect(mockedChat).toHaveBeenCalledTimes(2);
+  });
+
+  it("flags fabricated placeholders and refuses to lose verbatim numbers", async () => {
+    mockedChat
+      .mockResolvedValueOnce(responseJson("Answer in [target audience] tone, budget 300 days."))
+      .mockResolvedValueOnce(responseJson("Keep exactly the 300 day budget, no audience invented."));
+    mockedGate.mockResolvedValue({ intentPreserved: 0.95, overEngineered: 0.05, passed: true });
+
+    const result = await optimizePrompt({
+      prompt: "Answer with 300 days budget.",
+      kind: "user",
+      deepseekApiKey: "sk-test",
+      openrouterApiKey: "sk-or-test",
+    });
+
+    expect(result.optimized).toContain("300");
+    expect((result.optimized.match(/\[[^\]]+\]/g) ?? [])).toEqual([]);
+  });
+
+  it("enforces the identity lock for subject-photo prompts", async () => {
+    mockedChat.mockResolvedValue(responseJson("A red car in the rain."));
+    mockedGate.mockResolvedValue({ intentPreserved: 0.95, overEngineered: 0.1, passed: true });
+
+    const result = await optimizePrompt({
+      prompt: "The subject in the photo standing in the rain",
+      kind: "image",
+      deepseekApiKey: "sk-test",
+      openrouterApiKey: "sk-or-test",
+    });
+
+    expect(result.optimized.startsWith("Use photo in the attachment")).toBe(true);
+  });
+
+  it("surfaces unresolved questions in the result", async () => {
+    mockedChat.mockResolvedValue(
+      JSON.stringify({
+        optimized: "A rewrite.",
+        questions: ["What tone should I use?"],
+        summary: "s",
+        changes: ["c"],
+      }),
+    );
+    mockedGate.mockResolvedValue({ intentPreserved: 0.95, overEngineered: 0.1, passed: true });
+
+    const result = await optimizePrompt({
+      prompt: "Rewrite this opener, please and thanks.",
+      kind: "user",
+      deepseekApiKey: "sk-test",
+      openrouterApiKey: "sk-or-test",
+    });
+
+    expect(result.unresolvedQuestions).toContain("What tone should I use?");
+  });
+});

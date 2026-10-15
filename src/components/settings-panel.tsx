@@ -17,7 +17,6 @@ export function SettingsContent({ className }: { className?: string }) {
   const { settings, updateSetting } = useSettings();
   const [deepseekKeyDraft, setDeepseekKeyDraft] = useState(settings.deepseekApiKey || "");
   const [openrouterKeyDraft, setOpenrouterKeyDraft] = useState(settings.openrouterApiKey || "");
-  const [typesafeKeyDraft, setTypesafeKeyDraft] = useState(settings.typesafeApiKey || "");
   const [testStatus, setTestStatus] = useState<string | null>(null);
   const [testLoading, setTestLoading] = useState(false);
 
@@ -30,12 +29,6 @@ export function SettingsContent({ className }: { className?: string }) {
   function saveOpenrouterKey() {
     updateSetting("openrouterApiKey", openrouterKeyDraft.trim());
     setTestStatus("OpenRouter (Microsoft-Decision-1) key saved in browser localStorage.");
-    setTimeout(() => setTestStatus(null), 3000);
-  }
-
-  function saveTypesafeKey() {
-    updateSetting("typesafeApiKey", typesafeKeyDraft.trim());
-    setTestStatus("TypeSafe Jev API key saved in browser localStorage.");
     setTimeout(() => setTestStatus(null), 3000);
   }
 
@@ -238,100 +231,6 @@ export function SettingsContent({ className }: { className?: string }) {
           </div>
           <p className="text-[11px] text-muted-fg">
             Runs Microsoft-Decision-1 at 85ms median latency ($0.042/1M tokens, free output tokens).
-          </p>
-        </div>
-      </div>
-
-      {/* TypeSafe Jev Diagnostics Card */}
-      <div className="space-y-4 rounded-xl border border-border bg-surface/70 p-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="font-semibold text-foreground flex items-center gap-2 text-sm">
-              TypeSafe Jev
-              <span className="rounded bg-emerald-950/80 px-2 py-0.5 text-[10px] font-semibold text-emerald-300 border border-emerald-800/80">
-                System One Fallback
-              </span>
-            </h3>
-            <p className="text-xs text-muted-fg mt-0.5">
-              Secondary calibrated probabilistic engine for rubric scoring and intent verification.
-            </p>
-          </div>
-          <a
-            href="https://typesafe.ai"
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-accent hover:underline font-medium"
-          >
-            TypeSafe Info
-            <ExternalLink className="h-3 w-3" />
-          </a>
-        </div>
-
-        <div className="space-y-2">
-          <label className="block text-xs font-medium text-foreground">
-            TypeSafe API Key <span className="text-muted-fg font-normal">(Optional Fallback)</span>
-          </label>
-          <div className="flex gap-2">
-            <input
-              type="password"
-              placeholder="ts-..."
-              value={typesafeKeyDraft}
-              onChange={(e) => setTypesafeKeyDraft(e.target.value)}
-              className="flex-1 rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs text-foreground placeholder:text-muted-fg focus:border-accent focus:outline-none"
-            />
-            <button
-              type="button"
-              onClick={saveTypesafeKey}
-              className="rounded-lg border border-border bg-surface-muted px-3.5 py-2 text-xs font-semibold text-foreground hover:border-accent transition"
-            >
-              Save
-            </button>
-          </div>
-          {settings.typesafeApiKey && (
-            <p className="text-[11px] text-emerald-400 flex items-center gap-1 mt-1">
-              <CheckCircle2 className="h-3 w-3" /> API Key saved in this browser
-            </p>
-          )}
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-            <div>
-              <label className="block text-xs font-medium text-foreground mb-1">
-                Diagnostic Engine Preference
-              </label>
-              <select
-                value={settings.preferredEngine || "auto"}
-                onChange={(e) =>
-                  updateSetting(
-                    "preferredEngine",
-                    e.target.value as "auto" | "jev" | "decision-1",
-                  )
-                }
-                className="w-full rounded-lg border border-border bg-surface-muted px-3 py-2 text-xs text-foreground focus:border-accent focus:outline-none"
-              >
-                <option value="auto">Auto (Prioritize available key)</option>
-                <option value="jev">TypeSafe Jev (Immediate 1.14)</option>
-                <option value="decision-1">Microsoft-Decision-1 (OpenRouter)</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-foreground mb-1">
-                TypeSafe Jev Model
-              </label>
-              <select
-                value={settings.typesafeModel || "jev-preview"}
-                onChange={(e) => updateSetting("typesafeModel", e.target.value)}
-                className="w-full rounded-lg border border-border bg-surface-muted px-3 py-2 text-xs text-foreground font-mono focus:border-accent focus:outline-none"
-              >
-                <option value="jev-preview">jev-preview (Jev 1.14 · Active)</option>
-                <option value="jev-1.14.0">jev-1.14.0 (Direct Pin)</option>
-                <option value="jev-latest">jev-latest (Current default)</option>
-                <option value="jev-1.13.0">jev-1.13.0 (Legacy)</option>
-              </select>
-            </div>
-          </div>
-          <p className="text-[11px] text-muted-fg">
-            <code className="text-foreground">jev-preview</code> gives you immediate access to Jev 1.14.0 without waiting for the 1-week alias rollover.
           </p>
         </div>
 

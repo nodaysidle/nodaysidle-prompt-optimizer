@@ -89,12 +89,10 @@ export function DiagnosticsPanel({
               <span>Instant evaluation powered by</span>
               <span className="font-medium text-foreground">
                 {diagnostics?.engine
-                  ? diagnostics.engine.startsWith("jev")
-                    ? `TypeSafe Jev (${diagnostics.engine})`
-                    : diagnostics.engine === "microsoft/microsoft-decision-1"
-                    ? "Microsoft-Decision-1"
+                  ? diagnostics.heuristic
+                    ? "Rule-based heuristics (not a calibrated model)"
                     : diagnostics.engine
-                  : "TypeSafe Jev System One"}
+                  : "Microsoft-Decision-1"}
               </span>
             </p>
           </div>

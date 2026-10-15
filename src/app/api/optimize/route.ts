@@ -66,17 +66,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const typesafeKey =
-      req.headers.get("x-typesafe-key")?.trim() ||
-      process.env.TYPESAFE_API_KEY?.trim();
-
     const result = await optimizePrompt({
       prompt: prompt.trim(),
       kind: effectiveKind,
       engineTarget,
       deepseekApiKey: deepseekKey || openrouterKey!,
       deepseekModel: model || "deepseek-chat",
-      typesafeApiKey: typesafeKey,
       openrouterApiKey: openrouterKey,
       existingDiagnostics,
     });

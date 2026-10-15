@@ -12,6 +12,21 @@ export interface DeepSeekChatParams {
   timeoutMs?: number;
 }
 
+// Global in-process circuit breaker state for official DeepSeek API
+let deepseekCircuitOpenUntil = 0;
+
+export function isDeepSeekCircuitOpen(): boolean {
+  return Date.now() < deepseekCircuitOpenUntil;
+}
+
+export function tripDeepSeekCircuit(durationMs = 5 * 60 * 1000): void {
+  deepseekCircuitOpenUntil = Date.now() + durationMs;
+}
+
+export function resetDeepSeekCircuit(): void {
+  deepseekCircuitOpenUntil = 0;
+}
+
 async function callChatCompletion(params: {
   url: string;
   authKey: string;
@@ -32,6 +47,13 @@ async function callChatCompletion(params: {
 
     if (params.jsonMode) {
       body.response_format = { type: "json_object" };
+    }
+
+    if (params.url.includes("openrouter.ai")) {
+      body.provider = {
+        order: ["DeepInfra", "Fireworks", "Together"],
+        allow_fallbacks: true,
+      };
     }
 
     const res = await fetch(params.url, {
@@ -86,11 +108,11 @@ export async function chatDeepSeek(params: DeepSeekChatParams): Promise<string> 
     (apiKey.startsWith("sk-or-") ? apiKey : undefined) ||
     process.env.OPENROUTER_API_KEY?.trim();
 
-  // If user passed an OpenRouter key directly
-  if (apiKey.startsWith("sk-or-")) {
+  // If user passed an OpenRouter key directly, or circuit breaker is currently open
+  if (apiKey.startsWith("sk-or-") || (openrouterKey && isDeepSeekCircuitOpen())) {
     return callChatCompletion({
       url: OPENROUTER_API_URL,
-      authKey: apiKey,
+      authKey: openrouterKey || apiKey,
       model: params.model?.includes("/") ? params.model : "deepseek/deepseek-chat",
       messages: [
         { role: "system", content: params.system },
@@ -98,13 +120,13 @@ export async function chatDeepSeek(params: DeepSeekChatParams): Promise<string> 
       ],
       jsonMode: params.jsonMode,
       temperature: params.temperature,
-      timeoutMs: params.timeoutMs,
+      timeoutMs: params.timeoutMs ?? 20000,
     });
   }
 
-  // Primary: Official DeepSeek API with 8s timeout to avoid Vercel serverless timeouts
+  // Primary: Official DeepSeek API with aggressive 2.5s fast timeout
   try {
-    return await callChatCompletion({
+    const res = await callChatCompletion({
       url: DEEPSEEK_API_URL,
       authKey: apiKey,
       model: params.model || "deepseek-chat",
@@ -114,13 +136,16 @@ export async function chatDeepSeek(params: DeepSeekChatParams): Promise<string> 
       ],
       jsonMode: params.jsonMode,
       temperature: params.temperature,
-      timeoutMs: params.timeoutMs ?? 8000,
+      timeoutMs: params.timeoutMs ?? 2500,
     });
+    resetDeepSeekCircuit();
+    return res;
   } catch (err: any) {
-    // If DeepSeek official API fails for any reason and we have an OpenRouter key, fall back immediately
+    // If DeepSeek official API fails, times out (>2.5s), or is overloaded
     if (openrouterKey) {
+      tripDeepSeekCircuit(5 * 60 * 1000);
       console.warn(
-        "DeepSeek official API failed or timed out, seamlessly falling back to DeepSeek-V3 on OpenRouter...",
+        "DeepSeek official API slow/unavailable (>2.5s or error), tripping circuit breaker for 5m & immediately routing to OpenRouter DeepSeek-V3...",
         err?.message || err,
       );
       return await callChatCompletion({
@@ -169,28 +194,32 @@ export async function runPromptTest(params: {
     messages.push({ role: "user", content: params.prompt });
   }
 
-  if (apiKey.startsWith("sk-or-")) {
+  if (apiKey.startsWith("sk-or-") || (openrouterKey && isDeepSeekCircuitOpen())) {
     return callChatCompletion({
       url: OPENROUTER_API_URL,
-      authKey: apiKey,
+      authKey: openrouterKey || apiKey,
       model: params.model?.includes("/") ? params.model : "deepseek/deepseek-chat",
       messages,
       temperature: 0.5,
+      timeoutMs: 20000,
     });
   }
 
   try {
-    return await callChatCompletion({
+    const res = await callChatCompletion({
       url: DEEPSEEK_API_URL,
       authKey: apiKey,
       model: params.model || "deepseek-chat",
       messages,
       temperature: 0.5,
-      timeoutMs: 8000,
+      timeoutMs: 2500,
     });
+    resetDeepSeekCircuit();
+    return res;
   } catch (err: any) {
     if (openrouterKey) {
-      console.warn("DeepSeek API failed for test run, falling back to OpenRouter...", err?.message || err);
+      tripDeepSeekCircuit(5 * 60 * 1000);
+      console.warn("DeepSeek API slow/failed for test run, falling back to OpenRouter...", err?.message || err);
       return await callChatCompletion({
         url: OPENROUTER_API_URL,
         authKey: openrouterKey,

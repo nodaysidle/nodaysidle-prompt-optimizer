@@ -286,8 +286,51 @@ export function SettingsContent({ className }: { className?: string }) {
               Save
             </button>
           </div>
+          {settings.typesafeApiKey && (
+            <p className="text-[11px] text-emerald-400 flex items-center gap-1 mt-1">
+              <CheckCircle2 className="h-3 w-3" /> API Key saved in this browser
+            </p>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+            <div>
+              <label className="block text-xs font-medium text-foreground mb-1">
+                Diagnostic Engine Preference
+              </label>
+              <select
+                value={settings.preferredEngine || "auto"}
+                onChange={(e) =>
+                  updateSetting(
+                    "preferredEngine",
+                    e.target.value as "auto" | "jev" | "decision-1",
+                  )
+                }
+                className="w-full rounded-lg border border-border bg-surface-muted px-3 py-2 text-xs text-foreground focus:border-accent focus:outline-none"
+              >
+                <option value="auto">Auto (Prioritize available key)</option>
+                <option value="jev">TypeSafe Jev (Immediate 1.14)</option>
+                <option value="decision-1">Microsoft-Decision-1 (OpenRouter)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-foreground mb-1">
+                TypeSafe Jev Model
+              </label>
+              <select
+                value={settings.typesafeModel || "jev-preview"}
+                onChange={(e) => updateSetting("typesafeModel", e.target.value)}
+                className="w-full rounded-lg border border-border bg-surface-muted px-3 py-2 text-xs text-foreground font-mono focus:border-accent focus:outline-none"
+              >
+                <option value="jev-preview">jev-preview (Jev 1.14 · Active)</option>
+                <option value="jev-1.14.0">jev-1.14.0 (Direct Pin)</option>
+                <option value="jev-latest">jev-latest (Current default)</option>
+                <option value="jev-1.13.0">jev-1.13.0 (Legacy)</option>
+              </select>
+            </div>
+          </div>
           <p className="text-[11px] text-muted-fg">
-            If left empty, built-in deterministic heuristic diagnostics will automatically analyze your prompt at zero cost.
+            <code className="text-foreground">jev-preview</code> gives you immediate access to Jev 1.14.0 without waiting for the 1-week alias rollover.
           </p>
         </div>
 

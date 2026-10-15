@@ -9,7 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@typesafe-ai/sdk": "^0.6.0",
+    "@typesafe-ai/sdk": "^0.7.0",
     "clsx": "^2.1.1",
     "diff": "^9.0.0",
     "lucide-react": "^1.50.0",

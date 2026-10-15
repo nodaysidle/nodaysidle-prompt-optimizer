@@ -85,8 +85,17 @@ export function DiagnosticsPanel({
                 </span>
               )}
             </div>
-            <p className="text-[11px] text-muted-fg">
-              Instant evaluation powered by TypeSafe Jev System One
+            <p className="text-[11px] text-muted-fg flex items-center gap-1.5 flex-wrap">
+              <span>Instant evaluation powered by</span>
+              <span className="font-medium text-foreground">
+                {diagnostics?.engine
+                  ? diagnostics.engine.startsWith("jev")
+                    ? `TypeSafe Jev (${diagnostics.engine})`
+                    : diagnostics.engine === "microsoft/microsoft-decision-1"
+                    ? "Microsoft-Decision-1"
+                    : diagnostics.engine
+                  : "TypeSafe Jev System One"}
+              </span>
             </p>
           </div>
         </div>

@@ -123,6 +123,8 @@ export function PromptWorkspace() {
             "Content-Type": "application/json",
             "x-openrouter-key": settings.openrouterApiKey || "",
             "x-typesafe-key": settings.typesafeApiKey || "",
+            "x-preferred-engine": settings.preferredEngine || "auto",
+            "x-typesafe-model": settings.typesafeModel || "jev-preview",
           },
           body: JSON.stringify({ prompt: trimmed, kind: targetKind }),
         });
@@ -136,7 +138,12 @@ export function PromptWorkspace() {
         setDiagnosing(false);
       }
     },
-    [settings.typesafeApiKey, settings.openrouterApiKey],
+    [
+      settings.typesafeApiKey,
+      settings.openrouterApiKey,
+      settings.preferredEngine,
+      settings.typesafeModel,
+    ],
   );
 
   // Debounced auto-diagnose on typing

@@ -12,6 +12,7 @@ export interface DiagnosticResult {
   suggestedKind?: PromptKind;
   issues: string[];
   strengths: string[];
+  engine?: string;
 }
 
 export type EngineTarget =
@@ -54,6 +55,8 @@ export interface AppSettings {
   deepseekApiKey?: string;
   deepseekModel: string;
   typesafeApiKey?: string;
+  typesafeModel?: string;
+  preferredEngine?: "auto" | "jev" | "decision-1";
   openrouterApiKey?: string;
   autoDiagnose: boolean;
 }
@@ -62,6 +65,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   deepseekApiKey: "",
   deepseekModel: "deepseek-chat",
   typesafeApiKey: "",
+  typesafeModel: "jev-preview",
+  preferredEngine: "auto",
   openrouterApiKey: "",
   autoDiagnose: true,
 };

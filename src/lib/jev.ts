@@ -1,16 +1,26 @@
 import { TypeSafeClient, choice, noul, score } from "@typesafe-ai/sdk";
 import type { DiagnosticResult, QualityGateResult, PromptKind } from "./types";
 
+export const DEFAULT_JEV_MODEL = process.env.TYPESAFE_MODEL || "jev-preview";
+
 export interface DiagnoseParams {
   prompt: string;
   kind?: PromptKind;
   apiKey?: string;
+  typesafeKey?: string;
+  openrouterKey?: string;
+  model?: string;
+  preferJev?: boolean;
 }
 
 export interface QualityGateParams {
   original: string;
   optimized: string;
   apiKey?: string;
+  typesafeKey?: string;
+  openrouterKey?: string;
+  model?: string;
+  preferJev?: boolean;
 }
 
 const CLARITY_LEGEND: Record<number, string> = {
@@ -65,11 +75,19 @@ async function callDecision1OpenRouter(
 export async function runJevDiagnostics(
   params: DiagnoseParams,
 ): Promise<DiagnosticResult> {
-  const openRouterKey =
-    (params.apiKey?.startsWith("sk-or-") ? params.apiKey : undefined) ||
-    process.env.OPENROUTER_API_KEY;
+  const preferJev = Boolean(
+    params.preferJev ||
+    (params.apiKey && !params.apiKey.startsWith("sk-or-")) ||
+    (params.typesafeKey && !params.openrouterKey && !params.apiKey?.startsWith("sk-or-"))
+  );
 
-  // 1. Primary: Microsoft-Decision-1 via OpenRouter
+  const openRouterKey = !preferJev
+    ? (params.openrouterKey?.trim() ||
+       (params.apiKey?.startsWith("sk-or-") ? params.apiKey : undefined) ||
+       process.env.OPENROUTER_API_KEY)
+    : undefined;
+
+  // 1. Decision-1 via OpenRouter (when not prioritizing Jev)
   if (openRouterKey?.trim()) {
     try {
       const answers = await callDecision1OpenRouter(
@@ -203,26 +221,32 @@ export async function runJevDiagnostics(
         suggestedKind: suggestedKindChoice,
         issues,
         strengths,
+        engine: "microsoft/microsoft-decision-1",
       };
     } catch (err) {
       console.warn("Microsoft-Decision-1 via OpenRouter failed, trying fallback:", err);
     }
   }
 
-  // 2. Secondary: TypeSafe Jev if TypeSafe API key is available
+  // 2. TypeSafe Jev (supports Jev 1.14 preview, latest, or custom model)
   const typesafeKey =
+    params.typesafeKey?.trim() ||
     (!params.apiKey?.startsWith("sk-or-") ? params.apiKey : undefined) ||
     process.env.TYPESAFE_API_KEY;
+
+  const targetJevModel = params.model?.trim() || DEFAULT_JEV_MODEL;
 
   if (typesafeKey?.trim()) {
     try {
       const client = new TypeSafeClient({
         apiKey: typesafeKey.trim(),
         timeout: 8000,
+        defaultModel: targetJevModel,
       });
 
-      const { answers } = await client.systemOne({
+      const res = await client.systemOne({
         state: { prompt: params.prompt },
+        model: targetJevModel,
         questions: {
           clarity: score(
             "How clear, specific, and actionable is `prompt`?",
@@ -263,6 +287,7 @@ export async function runJevDiagnostics(
         },
       });
 
+      const { answers, model } = res;
       const clarityAnswer = answers.clarity;
       const clarityScore =
         clarityAnswer && "score" in clarityAnswer
@@ -335,6 +360,7 @@ export async function runJevDiagnostics(
         suggestedKind: suggestedKindChoice,
         issues,
         strengths,
+        engine: model || targetJevModel,
       };
     } catch (err) {
       console.warn("Jev API call failed, falling back to heuristic diagnostics:", err);
@@ -398,7 +424,9 @@ export async function runJevQualityGate(
     }
   }
 
+  const targetJevModel = params.model?.trim() || DEFAULT_JEV_MODEL;
   const typesafeKey =
+    params.typesafeKey?.trim() ||
     (!params.apiKey?.startsWith("sk-or-") ? params.apiKey : undefined) ||
     process.env.TYPESAFE_API_KEY;
 
@@ -408,6 +436,7 @@ export async function runJevQualityGate(
     const client = new TypeSafeClient({
       apiKey: typesafeKey.trim(),
       timeout: 8000,
+      defaultModel: targetJevModel,
     });
 
     const { answers } = await client.systemOne({
@@ -415,6 +444,7 @@ export async function runJevQualityGate(
         original: params.original,
         optimized: params.optimized,
       },
+      model: targetJevModel,
       questions: {
         intent_preserved: noul(
           "Does `optimized` faithfully preserve the core goal and intent of `original` without adding conflicting requirements?",

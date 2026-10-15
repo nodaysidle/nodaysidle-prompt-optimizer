@@ -25,10 +25,21 @@ export async function POST(req: NextRequest) {
       req.headers.get("x-typesafe-key")?.trim() ||
       process.env.TYPESAFE_API_KEY?.trim();
 
+    const preferredEngine = req.headers.get("x-preferred-engine")?.trim();
+    const requestedModel = req.headers.get("x-typesafe-model")?.trim();
+
+    const prioritizeJev =
+      preferredEngine === "jev" ||
+      Boolean(req.headers.get("x-typesafe-key")?.trim()) ||
+      (!openrouterKey && Boolean(typesafeKey));
+
     const diagnostics = await runJevDiagnostics({
       prompt: prompt.trim(),
       kind,
-      apiKey: openrouterKey || typesafeKey,
+      typesafeKey,
+      openrouterKey,
+      model: requestedModel,
+      preferJev: prioritizeJev,
     });
 
     return NextResponse.json(diagnostics);

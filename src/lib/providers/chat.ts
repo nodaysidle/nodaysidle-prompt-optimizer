@@ -17,6 +17,7 @@ export interface OptimizeParams {
   deepseekApiKey: string;
   deepseekModel?: string;
   typesafeApiKey?: string;
+  openrouterApiKey?: string;
   existingDiagnostics?: DiagnosticResult;
 }
 
@@ -58,9 +59,10 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
     params.engineTarget,
   );
 
-  // Step 3: Execute rewrite with DeepSeek platform API
+  // Step 3: Execute rewrite with DeepSeek platform API (with seamless OpenRouter fallback)
   const raw = await chatDeepSeek({
     apiKey: params.deepseekApiKey,
+    openrouterApiKey: params.openrouterApiKey,
     model: params.deepseekModel || "deepseek-chat",
     system,
     user,

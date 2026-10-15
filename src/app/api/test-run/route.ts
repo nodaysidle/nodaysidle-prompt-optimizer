@@ -21,18 +21,25 @@ export async function POST(req: NextRequest) {
       req.headers.get("x-deepseek-key")?.trim() ||
       process.env.DEEPSEEK_API_KEY?.trim();
 
-    if (!deepseekKey) {
+    const openrouterKey =
+      req.headers.get("x-openrouter-key")?.trim() ||
+      process.env.OPENROUTER_API_KEY?.trim();
+
+    const effectiveKey = deepseekKey || openrouterKey;
+
+    if (!effectiveKey) {
       return NextResponse.json(
         {
           error:
-            "DeepSeek API key is required. Add it in Settings or configure DEEPSEEK_API_KEY on the server.",
+            "DeepSeek API key or OpenRouter API key is required. Add it in Settings or configure on the server.",
         },
         { status: 401 },
       );
     }
 
     const output = await runPromptTest({
-      apiKey: deepseekKey,
+      apiKey: deepseekKey || openrouterKey!,
+      openrouterApiKey: openrouterKey,
       model: model || "deepseek-chat",
       prompt: prompt.trim(),
       testInput,

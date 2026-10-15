@@ -53,6 +53,7 @@ export function SettingsContent({ className }: { className?: string }) {
         headers: {
           "Content-Type": "application/json",
           "x-deepseek-key": key,
+          "x-openrouter-key": settings.openrouterApiKey || "",
         },
         body: JSON.stringify({
           prompt: "Say 'DeepSeek connected successfully' in 5 words.",

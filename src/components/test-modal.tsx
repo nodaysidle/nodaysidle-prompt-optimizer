@@ -37,6 +37,7 @@ export function TestModal({
         headers: {
           "Content-Type": "application/json",
           "x-deepseek-key": settings.deepseekApiKey || "",
+          "x-openrouter-key": settings.openrouterApiKey || "",
         },
         body: JSON.stringify({
           prompt,

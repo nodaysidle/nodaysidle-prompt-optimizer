@@ -45,24 +45,26 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Key can come from user client header or server environment variable
+    // Keys can come from user client headers or server environment variables
     const deepseekKey =
       req.headers.get("x-deepseek-key")?.trim() ||
       process.env.DEEPSEEK_API_KEY?.trim();
 
-    if (!deepseekKey) {
+    const openrouterKey =
+      req.headers.get("x-openrouter-key")?.trim() ||
+      process.env.OPENROUTER_API_KEY?.trim();
+
+    const effectiveChatKey = deepseekKey || openrouterKey;
+
+    if (!effectiveChatKey) {
       return NextResponse.json(
         {
           error:
-            "DeepSeek API key is required. Add it in Settings or configure DEEPSEEK_API_KEY on the server.",
+            "DeepSeek API key or OpenRouter API key is required. Add it in Settings or configure on the server.",
         },
         { status: 401 },
       );
     }
-
-    const openrouterKey =
-      req.headers.get("x-openrouter-key")?.trim() ||
-      process.env.OPENROUTER_API_KEY?.trim();
 
     const typesafeKey =
       req.headers.get("x-typesafe-key")?.trim() ||
@@ -72,9 +74,10 @@ export async function POST(req: NextRequest) {
       prompt: prompt.trim(),
       kind: effectiveKind,
       engineTarget,
-      deepseekApiKey: deepseekKey,
+      deepseekApiKey: deepseekKey || openrouterKey!,
       deepseekModel: model || "deepseek-chat",
-      typesafeApiKey: openrouterKey || typesafeKey,
+      typesafeApiKey: typesafeKey,
+      openrouterApiKey: openrouterKey,
       existingDiagnostics,
     });
 

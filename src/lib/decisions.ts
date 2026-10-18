@@ -30,10 +30,12 @@ const SUGGESTED_KIND_CRITERIA = {
   user: "Direct user question, query, or task",
   system: "System instructions or behavioral persona rules",
   image: "Visual still image generation prompt",
-  video: "Video or motion generation prompt (Veo 3.1, Kling, Runway, Omni)",
+  video: "Video or motion generation prompt (Veo 3.1, Gemini Omni 1.1)",
 };
 
 const GATE_SCORES = { intentPreserved: 0.7, overEngineered: 0.4 };
+/** Below this, a rewrite that passes the gate is treated as "not clearly better" and the original is kept. */
+export const MIN_IMPROVEMENT = 0.45;
 
 type QuestionSpec =
   | { key: string; type: "noul"; instructions: string }
@@ -178,10 +180,12 @@ export function mapDiagnosticAnswers(
 function evaluateGateScores(
   intentPreserved: number,
   overEngineered: number,
+  improvement?: number,
 ): QualityGateResult {
   return {
     intentPreserved,
     overEngineered,
+    improvement,
     passed: intentPreserved >= GATE_SCORES.intentPreserved && overEngineered <= GATE_SCORES.overEngineered,
     judge: "Microsoft-Decision-1",
   };
@@ -251,6 +255,8 @@ export async function runDiagnostics(
 
 const INTENT_QUESTION =
   "Does `optimized` preserve the core goal and subject of `original` without contradicting it, omitting the user's stated requirements, or adding requirements that conflict with the user's intent? Compatible stylistic or scene elaboration added by `optimized` should not count against intent.";
+const IMPROVEMENT_QUESTION =
+  "Is `optimized` more likely than `original` to get the result the user wants from the target model? Answer no if the two are about equally good or the changes are cosmetic.";
 const OVER_ENGINEERED_QUESTION =
   "Is `optimized` excessively verbose, cluttered, or bloated with filler that does not help the task? Deliberate structure requested by the user does not count as bloat.";
 
@@ -272,6 +278,7 @@ export async function runQualityGate(
       {
         intent_preserved: { type: "noul", instructions: INTENT_QUESTION },
         over_engineered: { type: "noul", instructions: OVER_ENGINEERED_QUESTION },
+        improves: { type: "noul", instructions: IMPROVEMENT_QUESTION },
       },
     );
 
@@ -283,7 +290,8 @@ export async function runQualityGate(
     if (typeof intentPreserved !== "number" || typeof overEngineered !== "number") {
       throw new Error("Decision-1 gate returned a non-numeric answer");
     }
-    return evaluateGateScores(intentPreserved, overEngineered);
+    const improvement = typeof answers.improves?.noul === "number" ? answers.improves.noul : undefined;
+    return evaluateGateScores(intentPreserved, overEngineered, improvement);
   } catch (err) {
     console.warn("Decision-1 Quality Gate failed, skipping gate evaluation:", err);
     return undefined;

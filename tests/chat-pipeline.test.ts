@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { optimizePrompt } from "@/lib/providers/chat";
+import { optimizePrompt, rewriteMaxTokens } from "@/lib/providers/chat";
 import type { DiagnosticResult } from "@/lib/types";
 
 vi.mock("@/lib/providers/deepseek", () => ({
@@ -7,6 +7,7 @@ vi.mock("@/lib/providers/deepseek", () => ({
 }));
 
 vi.mock("@/lib/decisions", () => ({
+  MIN_IMPROVEMENT: 0.45,
   runDiagnostics: vi.fn(),
   runQualityGate: vi.fn(),
 }));
@@ -98,6 +99,9 @@ describe("optimizePrompt pipeline", () => {
     expect(result.changes).toEqual([]);
     expect(result.summary).toContain("preserved unchanged");
     expect(mockedChat).toHaveBeenCalledTimes(2);
+    expect(result.rejectedDraft?.reason).toBe("failed");
+    expect(result.rejectedDraft?.optimized).toContain("corporate-deck");
+    expect(result.rejectedDraft?.problems.join(" ")).toMatch(/intent match only 40%/);
   });
 
   it("flags fabricated placeholders and refuses to lose verbatim numbers", async () => {
@@ -150,5 +154,89 @@ describe("optimizePrompt pipeline", () => {
     });
 
     expect(result.unresolvedQuestions).toContain("What tone should I use?");
+  });
+
+  it("keeps the original when the rewrite passes but is not clearly better", async () => {
+    const original = "List three uses of Rust's borrow checker.";
+    mockedChat.mockResolvedValue(responseJson("List three practical uses of Rust's borrow checker."));
+    mockedGate.mockResolvedValue({ intentPreserved: 0.95, overEngineered: 0.1, improvement: 0.2, passed: true });
+
+    const result = await optimizePrompt({
+      prompt: original,
+      kind: "user",
+      deepseekApiKey: "sk-test",
+      openrouterApiKey: "sk-or-test",
+    });
+
+    expect(result.optimized).toBe(original);
+    expect(result.summary).toContain("already effective");
+    expect(result.rejectedDraft?.reason).toBe("marginal");
+    expect(result.rejectedDraft?.optimized).toContain("practical uses");
+    expect(mockedChat).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns the rewrite when Decision-1 sees a clear improvement", async () => {
+    mockedChat.mockResolvedValue(responseJson("A much clearer task."));
+    mockedGate.mockResolvedValue({ intentPreserved: 0.9, overEngineered: 0.1, improvement: 0.8, passed: true });
+
+    const result = await optimizePrompt({
+      prompt: "do the thing with the data",
+      kind: "user",
+      deepseekApiKey: "sk-test",
+      openrouterApiKey: "sk-or-test",
+    });
+
+    expect(result.optimized).toBe("A much clearer task.");
+    expect(result.rejectedDraft).toBeUndefined();
+  });
+
+  it("prefers the rewriter's specific questions over generic diagnostic ones", async () => {
+    mockedDiagnostics.mockResolvedValue({
+      ...baseDiagnostics,
+      unresolvedQuestions: ["What specific outcome makes this task a success?"],
+    });
+    mockedChat.mockResolvedValue(
+      JSON.stringify({ optimized: "A rewrite.", questions: ["Which audience is the email for?"], summary: "s", changes: ["c"] }),
+    );
+    mockedGate.mockResolvedValue({ intentPreserved: 0.95, overEngineered: 0.1, passed: true });
+
+    const result = await optimizePrompt({
+      prompt: "Write the email.",
+      kind: "user",
+      deepseekApiKey: "sk-test",
+      openrouterApiKey: "sk-or-test",
+    });
+
+    expect(result.unresolvedQuestions).toEqual(["Which audience is the email for?"]);
+  });
+
+  it("falls back to diagnostic questions when the rewriter asks none", async () => {
+    mockedDiagnostics.mockResolvedValue({
+      ...baseDiagnostics,
+      unresolvedQuestions: ["What specific outcome makes this task a success?"],
+    });
+    mockedChat.mockResolvedValue(responseJson("A rewrite."));
+    mockedGate.mockResolvedValue({ intentPreserved: 0.95, overEngineered: 0.1, passed: true });
+
+    const result = await optimizePrompt({
+      prompt: "Write the email.",
+      kind: "user",
+      deepseekApiKey: "sk-test",
+      openrouterApiKey: "sk-or-test",
+    });
+
+    expect(result.unresolvedQuestions).toEqual(["What specific outcome makes this task a success?"]);
+  });
+
+  it("passes an output budget that grows with the prompt", async () => {
+    mockedChat.mockResolvedValue(responseJson("A rewrite."));
+    mockedGate.mockResolvedValue({ intentPreserved: 0.95, overEngineered: 0.1, passed: true });
+    const longPrompt = "Rule: keep answers short. ".repeat(600);
+
+    await optimizePrompt({ prompt: longPrompt, kind: "system", deepseekApiKey: "sk-test", openrouterApiKey: "sk-or-test" });
+
+    expect(mockedChat.mock.calls[0][0].maxTokens).toBe(rewriteMaxTokens(longPrompt));
+    expect(rewriteMaxTokens(longPrompt)).toBe(8000);
+    expect(rewriteMaxTokens("short")).toBe(2200);
   });
 });

@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="https://nodaysidle-prompt-optimizer.vercel.app"><img src="https://img.shields.io/badge/Live%20Demo-nodaysidle--prompt--optimizer.vercel.app-7928CA?style=flat-square&logo=vercel&logoColor=white" alt="Live Demo"></a>
-  <img src="https://img.shields.io/badge/Engine-DeepSeek--V3%20Flash-4E6EF2?style=flat-square&logo=deepseek&logoColor=white" alt="DeepSeek">
+  <img src="https://img.shields.io/badge/Engine-DeepSeek--V4.1%20Flash-4E6EF2?style=flat-square&logo=deepseek&logoColor=white" alt="DeepSeek">
   <img src="https://img.shields.io/badge/Cognition-TypeSafe%20Jev-FF5722?style=flat-square" alt="TypeSafe Jev">
   <img src="https://img.shields.io/badge/Framework-Next.js%2016%20%7C%20React%2019-000000?style=flat-square&logo=next.js&logoColor=white" alt="Next.js">
   <img src="https://img.shields.io/badge/Styling-Tailwind%20CSS%20v4-38B2AC?style=flat-square&logo=tailwind-css&logoColor=white" alt="Tailwind CSS">
@@ -39,13 +39,13 @@ flowchart TD
     end
     
     B --> C["Diagnostic Context & Prompt Conditioning"]
-    C --> D["DeepSeek Platform Engine (deepseek-chat / deepseek-reasoner)"]
+    C --> D["DeepSeek Engine (V4.1 Flash, or V4 Pro)"]
     
     D --> E["Optimized Candidate Prompt"]
     subgraph Output_Formulation ["Target-Specific Output"]
         E --> E1["LLM Prompts (Structured Markdown / Role Directives)"]
-        E --> E2["Image Prompts (Natural Visual Density for Nano Banana / Flux)"]
-        E --> E3["Video Prompts ([SCENE], [TEMPORAL ACTION], [CAMERA & LIGHTING] for Veo 3.1 / Kling / Runway)"]
+        E --> E2["Image Prompts (Nano Banana / ChatGPT Images)"]
+        E --> E3["Video Prompts (Veo 3.1 / Gemini Omni 1.1)"]
     end
     
     E --> F["Jev Quality Gate"]
@@ -65,13 +65,13 @@ flowchart TD
 | Feature | Description | Engine / Mechanism |
 |---|---|---|
 | **System One Rubric Linter** | Sub-100ms probabilistic evaluation of prompt clarity, ambiguity, missing negative constraints, temporal motion dynamics, and camera choreography. | TypeSafe Jev (`Score`, `Noul`, `Choice`) |
-| **Video Generation Optimization** | Dedicated pipeline for **Google Veo 3.1, Google Omni, Kling, and Runway**. Generates structured plain-text tags (`[SCENE]`, `[TEMPORAL ACTION]`, `[CAMERA & LIGHTING]`) with second-by-second action progression. | DeepSeek Flash + Jev Temporal Audit |
-| **Image Generation Optimization** | Visual composition, lighting, camera, and aspect ratio engineering for **Google Nano Banana, GPT-1.5 Image, Midjourney, and Flux.1**. | DeepSeek Flash |
-| **Diagnostic-Conditioned Rewriting** | Feeds specific diagnosed flaws directly into the rewriter to eliminate generic boilerplate and resolve exact prompt shortcomings. | DeepSeek Platform API (`deepseek-chat`) |
+| **Video Generation Optimization** | Dedicated pipeline for **Google Veo 3.1 and Gemini Omni 1.1**. Generates structured plain-text tags (`[SCENE]`, `[TEMPORAL ACTION]`, `[CAMERA & LIGHTING]`) with second-by-second action progression. | DeepSeek Flash + Jev Temporal Audit |
+| **Image Generation Optimization** | Visual composition, lighting, camera, and aspect ratio engineering for **Google Nano Banana and ChatGPT Images (GPT Image 2/2.5)**. | DeepSeek Flash |
+| **Diagnostic-Conditioned Rewriting** | Feeds specific diagnosed flaws directly into the rewriter to eliminate generic boilerplate and resolve exact prompt shortcomings. | DeepSeek V4.1 Flash |
 | **Quality & Regression Gate** | Evaluates candidate rewrites against originals to verify that core intent is preserved without cognitive bloat. | TypeSafe Jev Verification Cascade |
 | **Word-Level Diff Visualizer** | Interactive additions (green highlight) and removals (red strike-through) with token/word delta counters. | `diff` word tokenization |
 | **Live Prompt Playground** | Execute original and optimized prompts against sample inputs in an in-app drawer to verify real outputs. | Server Edge Route `/api/test-run` |
-| **1-Click Preset Templates** | Instant templates for Veo 3.1 Supermoto drift, Kling FPV chase, SQL queries, code review personas, and visual diffusion prompts. | Prebuilt examples library |
+| **1-Click Preset Templates** | Instant templates for Veo 3.1 Supermoto drift, Veo / Omni FPV chase, SQL queries, code review personas, and visual diffusion prompts. | Prebuilt examples library |
 | **Zero-CORS & Secure Auth** | Direct server-side Next.js route handlers (`/api/optimize`, `/api/diagnose`, `/api/test-run`). No leaked secrets in client bundles. | Next.js App Router Edge Handlers |
 
 ---
@@ -81,7 +81,7 @@ flowchart TD
 - **Framework**: [Next.js 16](https://nextjs.org/) (App Router, Turbopack)
 - **UI Runtime**: [React 19](https://react.dev/)
 - **Styling**: [Tailwind CSS v4](https://tailwindcss.com/)
-- **Primary Inference**: [DeepSeek Platform API](https://platform.deepseek.com) (`deepseek-chat` / `deepseek-reasoner`)
+- **Primary Inference**: [DeepSeek Platform API](https://platform.deepseek.com) (`deepseek-v4.1-flash`, or `deepseek-v4-pro`; via OpenRouter when an OpenRouter key is set)
 - **System One Diagnostics**: [@typesafe-ai/sdk](https://typesafe.ai) (Jev probabilistic classification & scoring)
 - **Diffing Engine**: `diff`
 - **Icons**: `lucide-react`
@@ -182,7 +182,7 @@ nodaysidle-prompt-optimizer/
 
 Check out the complete practitioner guide in [**`TIPSANDTRICKS.md`**](./TIPSANDTRICKS.md) covering:
 - **Subject Identity Lock**: How to preserve facial geometry with reference photos.
-- **Speech & Dialogue**: How to prompt speaking characters with natural mouth movement and avoid subtitle text hallucinations in Google Omni 1.1, Veo, Kling, and Runway.
+- **Speech & Dialogue**: How to prompt speaking characters with natural mouth movement and avoid subtitle text hallucinations in Gemini Omni 1.1 and Veo 3.1.
 - **Veo 3.1 vs. Omni 1.1 Compatibility**: How to adapt prompts between foundation video models.
 - **Negative Prompting Cheat Sheet**: Essential artifact guard tokens for images and video.
 - **Camera & Aspect Ratio Cheat Sheet**: Preset specs for lenses, optics, and cinema framing.

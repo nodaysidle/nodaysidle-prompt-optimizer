@@ -164,7 +164,7 @@ export function SettingsContent({ className }: { className?: string }) {
                 type="text"
                 value={settings.deepseekModel}
                 onChange={(e) => updateSetting("deepseekModel", e.target.value)}
-                placeholder="e.g. deepseek-chat"
+                placeholder="e.g. deepseek-v4.1-flash"
                 className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground font-mono focus:border-accent focus:outline-none"
               />
               <select
@@ -172,13 +172,12 @@ export function SettingsContent({ className }: { className?: string }) {
                 onChange={(e) => updateSetting("deepseekModel", e.target.value)}
                 className="rounded-lg border border-border bg-surface-muted px-3 py-2 text-xs text-foreground focus:border-accent focus:outline-none"
               >
-                <option value="deepseek-chat">deepseek-chat (V3 Flash · Recommended)</option>
-                <option value="deepseek-reasoner">deepseek-reasoner (R1 Reasoning)</option>
-                <option value="deepseek-v4.1-flash">deepseek-v4.1-flash (Router)</option>
+                <option value="deepseek-v4.1-flash">deepseek-v4.1-flash (Recommended)</option>
+                <option value="deepseek-v4-pro">deepseek-v4-pro (slower, deeper)</option>
               </select>
             </div>
             <p className="mt-1 text-[11px] text-muted-fg">
-              <code className="text-foreground">deepseek-chat</code> is the default high-speed flagship model on the official platform.
+              <code className="text-foreground">deepseek-v4.1-flash</code> is the default. Older choices (deepseek-chat, deepseek-reasoner) map to V4.1 Flash and V4 Pro.
             </p>
           </label>
         </div>

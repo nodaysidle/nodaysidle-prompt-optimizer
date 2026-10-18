@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
       kind: effectiveKind,
       engineTarget,
       deepseekApiKey: deepseekKey || openrouterKey!,
-      deepseekModel: model || "deepseek-chat",
+      deepseekModel: model || "deepseek-v4.1-flash",
       openrouterApiKey: openrouterKey,
       existingDiagnostics,
     });

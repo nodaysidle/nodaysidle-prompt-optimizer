@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
     const output = await runPromptTest({
       apiKey: deepseekKey || openrouterKey!,
       openrouterApiKey: openrouterKey,
-      model: model || "deepseek-chat",
+      model: model || "deepseek-v4.1-flash",
       prompt: prompt.trim(),
       testInput,
     });

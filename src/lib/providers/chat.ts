@@ -4,6 +4,7 @@ import {
   buildRepairMessages,
   enforceIdentityLock,
   findFabricatedPlaceholders,
+  findLengthViolation,
   findPreservationViolations,
   isQuestionnairePrompt,
   isOnlySubjectPrompt,
@@ -16,9 +17,10 @@ import type {
   OptimizationResult,
   PromptKind,
   QualityGateResult,
+  RejectedDraft,
 } from "../types";
 import { chatDeepSeek } from "./deepseek";
-import { runDiagnostics, runQualityGate } from "../decisions";
+import { MIN_IMPROVEMENT, runDiagnostics, runQualityGate } from "../decisions";
 
 export interface OptimizeParams {
   prompt: string;
@@ -30,7 +32,11 @@ export interface OptimizeParams {
   existingDiagnostics?: DiagnosticResult;
 }
 
-const REWRITE_MAX_TOKENS = 2200;
+/** Output budget grows with the input so long prompts are not cut off mid-JSON (~3.5 chars per token). */
+export function rewriteMaxTokens(prompt: string): number {
+  const inputTokens = Math.ceil(prompt.length / 3.5);
+  return Math.min(8000, Math.max(2200, inputTokens * 2 + 800));
+}
 const PLACEHOLDER_GUARD_KINDS = new Set<PromptKind>(["user", "system"]);
 
 type ParsedRewrite = ReturnType<typeof parseOptimizationResponse>;
@@ -41,9 +47,15 @@ interface Verification {
   passed: boolean;
 }
 
+/**
+ * The rewriter's own questions are specific to this prompt; the diagnostic ones are generic templates.
+ * Show the generic ones only when the rewriter asked nothing.
+ */
 function mergeUnresolvedQuestions(
-  ...sources: (string[] | undefined)[]
+  diagnosticQuestions: string[] | undefined,
+  rewriterQuestions: string[] | undefined,
 ): string[] {
+  const sources = rewriterQuestions?.length ? [rewriterQuestions] : [diagnosticQuestions];
   const seen = new Set<string>();
   const out: string[] = [];
   for (const source of sources) {
@@ -122,7 +134,7 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
         system,
         user,
         jsonMode: true,
-        maxTokens: REWRITE_MAX_TOKENS,
+        maxTokens: rewriteMaxTokens(params.prompt),
       });
 
     const finalize = (raw: string): ParsedRewrite => {
@@ -172,6 +184,7 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
     const defects = [
       ...(placeholderGuard ? findFabricatedPlaceholders(params.prompt, optimized) : []),
       ...findPreservationViolations(params.prompt, optimized),
+      ...findLengthViolation(params.prompt, optimized, params.kind),
       ...(placeholderGuard && isQuestionnairePrompt(optimized)
         ? ["the optimized text is a questionnaire; questions belong in the separate questions field"]
         : []),
@@ -185,25 +198,77 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
     return ` Recurring defects: ${defects.slice(0, 3).join("; ")}.`;
   };
 
-  const returnOriginal = (gate?: QualityGateResult, defects: string[] = []): OptimizationResult => {
+  const original = () => (hasSubjectPrefix ? enforceIdentityLock(params.prompt, params.kind) : params.prompt);
+
+  const describeGate = (gate?: QualityGateResult) =>
+    gate
+      ? `intent ${Math.round(gate.intentPreserved * 100)}%, verbosity risk ${Math.round(gate.overEngineered * 100)}%${
+          gate.improvement !== undefined ? `, improvement ${Math.round(gate.improvement * 100)}%` : ""
+        } (${gate.judge ?? "model"})`
+      : "deterministic checks only";
+
+  const gateProblems = (gate?: QualityGateResult): string[] => {
+    if (!gate || gate.passed) return [];
+    const out: string[] = [];
+    if (gate.intentPreserved < 0.7) out.push(`intent match only ${Math.round(gate.intentPreserved * 100)}%`);
+    if (gate.overEngineered > 0.4) out.push(`verbosity risk ${Math.round(gate.overEngineered * 100)}%`);
+    return out;
+  };
+
+  const returnOriginal = (
+    gate: QualityGateResult | undefined,
+    defects: string[],
+    draft: ParsedRewrite,
+    draftProblems: string[],
+  ): OptimizationResult => {
     return {
-      optimized: hasSubjectPrefix ? enforceIdentityLock(params.prompt, params.kind) : params.prompt,
+      optimized: original(),
       negativePrompt: undefined,
-      summary: `Verification rejected both rewrites, so your original prompt is preserved unchanged.${describeDefectSummary(defects)} Gate verdict: ${
-        gate
-          ? `intent ${Math.round(gate.intentPreserved * 100)}%, verbosity risk ${Math.round(gate.overEngineered * 100)}% (${gate.judge ?? "model"})`
-          : "deterministic checks only"
-      }. Add the missing details yourself or retag the prompt type in Step 1.`,
+      summary: `Verification rejected both rewrites, so your original prompt is preserved unchanged.${describeDefectSummary(defects)} Gate verdict: ${describeGate(gate)}. The closest rewrite is shown below with its problems, so you can judge it yourself.`,
       changes: [],
       diagnostics,
       qualityGate: gate,
       suggestedKind: resolveSuggestedKind(diagnostics, params.kind),
       unresolvedQuestions: diagnostics.unresolvedQuestions,
+      rejectedDraft: {
+        optimized: draft.optimized,
+        negativePrompt: draft.negativePrompt,
+        reason: "failed",
+        problems: draftProblems,
+      },
+    };
+  };
+
+  /** The rewrite passed but Decision-1 doesn't see it as clearly better: keep the original, offer the draft. */
+  const isMarginal = (gate?: QualityGateResult) =>
+    gate?.improvement !== undefined && gate.improvement < MIN_IMPROVEMENT;
+
+  const returnMarginal = (draft: ParsedRewrite, gate: QualityGateResult): OptimizationResult => {
+    const rejectedDraft: RejectedDraft = {
+      optimized: draft.optimized,
+      negativePrompt: draft.negativePrompt,
+      reason: "marginal",
+      problems: [`only ${Math.round((gate.improvement ?? 0) * 100)}% likely to work better than your original`],
+    };
+    return {
+      optimized: original(),
+      negativePrompt: undefined,
+      summary: `Your prompt was already effective: the rewrite kept your intent but was not clearly better (${describeGate(gate)}), so your original is kept. The rewrite is shown below if you want it anyway.`,
+      changes: [],
+      diagnostics,
+      qualityGate: gate,
+      suggestedKind: resolveSuggestedKind(diagnostics, params.kind),
+      unresolvedQuestions: mergeUnresolvedQuestions(diagnostics.unresolvedQuestions, draft.questions),
+      rejectedDraft,
     };
   };
 
   const first = await attemptRewrite();
   const firstVerification = await verify(first.optimized);
+
+  if (firstVerification.passed && isMarginal(firstVerification.gate)) {
+    return returnMarginal(first, firstVerification.gate!);
+  }
 
   if (firstVerification.passed) {
     return {
@@ -228,6 +293,10 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
   });
   const repairedVerification = await verify(repaired.optimized);
 
+  if (repairedVerification.passed && isMarginal(repairedVerification.gate)) {
+    return returnMarginal(repaired, repairedVerification.gate!);
+  }
+
   if (repairedVerification.passed) {
     return {
       optimized: repaired.optimized,
@@ -245,8 +314,15 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
   }
 
   const unresolvedGate = firstVerification.gate ?? repairedVerification.gate;
-  return returnOriginal(unresolvedGate, [
-    ...firstVerification.defects,
-    ...repairedVerification.defects,
-  ]);
+  // the repaired draft is usually closer; keep the first one only if the repair made things worse
+  const repairedWorse = repairedVerification.defects.length > firstVerification.defects.length;
+  const [draft, draftVerification] = repairedWorse
+    ? [first, firstVerification]
+    : [repaired, repairedVerification];
+  return returnOriginal(
+    unresolvedGate,
+    [...firstVerification.defects, ...repairedVerification.defects],
+    draft,
+    [...draftVerification.defects, ...gateProblems(draftVerification.gate)],
+  );
 }

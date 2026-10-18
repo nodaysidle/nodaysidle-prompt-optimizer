@@ -1,6 +1,24 @@
 const DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions";
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 
+export const DEFAULT_MODEL = "deepseek-v4.1-flash";
+
+/**
+ * Maps the model chosen in Settings to the id each provider expects.
+ * Older saved choices (deepseek-chat, deepseek-reasoner) map to their V4 successors.
+ */
+export function resolveModels(model?: string): { openrouter: string; direct: string } {
+  const m = (model || DEFAULT_MODEL).trim();
+  if (m.includes("/")) return { openrouter: m, direct: "deepseek-flash" };
+  if (/^(deepseek-reasoner|deepseek-v4-pro)$/.test(m)) {
+    return { openrouter: "deepseek/deepseek-v4-pro", direct: "deepseek-v4-pro" };
+  }
+  if (/^(deepseek-chat|deepseek-flash|deepseek-v4\.1-flash)$/.test(m)) {
+    return { openrouter: "deepseek/deepseek-v4.1-flash", direct: "deepseek-flash" };
+  }
+  return { openrouter: `deepseek/${m}`, direct: m };
+}
+
 export interface DeepSeekChatParams {
   apiKey: string;
   openrouterApiKey?: string;
@@ -38,10 +56,7 @@ async function callChatCompletion(params: {
     }
 
     if (params.url.includes("openrouter.ai")) {
-      body.provider = {
-        order: ["CoreWeave", "SambaNova", "SiliconFlow", "DeepInfra"],
-        allow_fallbacks: true,
-      };
+      body.provider = { sort: "latency", allow_fallbacks: true };
     }
 
     const res = await fetch(params.url, {
@@ -96,9 +111,9 @@ export async function chatDeepSeek(params: DeepSeekChatParams): Promise<string> 
     (apiKey.startsWith("sk-or-") ? apiKey : undefined) ||
     process.env.OPENROUTER_API_KEY?.trim();
 
-  const openrouterModel = params.model?.includes("/")
-    ? params.model
-    : "deepseek/deepseek-chat-v3.1";
+  const models = resolveModels(params.model);
+  // long rewrites need more time than the old fixed 15 s / 10 s
+  const timeoutMs = params.timeoutMs ?? 15000 + Math.round((params.maxTokens ?? 2048) * 12);
 
   // When OpenRouter key is available (either client key or server env), prioritize it for instant ~1.2s execution
   if (openrouterKey) {
@@ -106,14 +121,15 @@ export async function chatDeepSeek(params: DeepSeekChatParams): Promise<string> 
       return await callChatCompletion({
         url: OPENROUTER_API_URL,
         authKey: openrouterKey,
-        model: openrouterModel,
+        model: models.openrouter,
         messages: [
           { role: "system", content: params.system },
           { role: "user", content: params.user },
         ],
         jsonMode: params.jsonMode,
         temperature: params.temperature,
-        timeoutMs: params.timeoutMs ?? 15000,
+        maxTokens: params.maxTokens,
+        timeoutMs,
       });
     } catch (openRouterErr) {
       console.warn("OpenRouter request failed, falling back to direct DeepSeek API:", openRouterErr);
@@ -121,14 +137,15 @@ export async function chatDeepSeek(params: DeepSeekChatParams): Promise<string> 
         return await callChatCompletion({
           url: DEEPSEEK_API_URL,
           authKey: apiKey,
-          model: params.model || "deepseek-chat",
+          model: models.direct,
           messages: [
             { role: "system", content: params.system },
             { role: "user", content: params.user },
           ],
           jsonMode: params.jsonMode,
           temperature: params.temperature,
-          timeoutMs: params.timeoutMs ?? 10000,
+          maxTokens: params.maxTokens,
+          timeoutMs,
         });
       }
       throw openRouterErr;
@@ -139,14 +156,15 @@ export async function chatDeepSeek(params: DeepSeekChatParams): Promise<string> 
   return await callChatCompletion({
     url: DEEPSEEK_API_URL,
     authKey: apiKey,
-    model: params.model || "deepseek-chat",
+    model: models.direct,
     messages: [
       { role: "system", content: params.system },
       { role: "user", content: params.user },
     ],
     jsonMode: params.jsonMode,
     temperature: params.temperature,
-    timeoutMs: params.timeoutMs ?? 10000,
+    maxTokens: params.maxTokens,
+    timeoutMs,
   });
 }
 
@@ -178,19 +196,17 @@ export async function runPromptTest(params: {
     messages.push({ role: "user", content: params.prompt });
   }
 
-  const openrouterModel = params.model?.includes("/")
-    ? params.model
-    : "deepseek/deepseek-chat-v3.1";
+  const models = resolveModels(params.model);
 
   if (openrouterKey) {
     try {
       return await callChatCompletion({
         url: OPENROUTER_API_URL,
         authKey: openrouterKey,
-        model: openrouterModel,
+        model: models.openrouter,
         messages,
         temperature: 0.5,
-        timeoutMs: 15000,
+        timeoutMs: 45000,
       });
     } catch (err) {
       console.warn("OpenRouter test-run failed, falling back to official DeepSeek:", err);
@@ -198,10 +214,10 @@ export async function runPromptTest(params: {
         return await callChatCompletion({
           url: DEEPSEEK_API_URL,
           authKey: apiKey,
-          model: params.model || "deepseek-chat",
+          model: models.direct,
           messages,
           temperature: 0.5,
-          timeoutMs: 10000,
+          timeoutMs: 45000,
         });
       }
       throw err;
@@ -211,9 +227,9 @@ export async function runPromptTest(params: {
   return await callChatCompletion({
     url: DEEPSEEK_API_URL,
     authKey: apiKey,
-    model: params.model || "deepseek-chat",
+    model: models.direct,
     messages,
     temperature: 0.5,
-    timeoutMs: 10000,
+    timeoutMs: 45000,
   });
 }

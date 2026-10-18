@@ -23,12 +23,13 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSettings } from "@/lib/settings-context";
-import type {
-  DiagnosticResult,
-  EngineTarget,
-  OptimizationResult,
-  PromptHistoryItem,
-  PromptKind,
+import {
+  normalizeEngineTarget,
+  type DiagnosticResult,
+  type EngineTarget,
+  type OptimizationResult,
+  type PromptHistoryItem,
+  type PromptKind,
 } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { isSubjectInPhotoPrompt } from "@/lib/optimizer-prompt";
@@ -61,13 +62,13 @@ const KINDS: {
   {
     id: "image",
     label: "Image Prompt",
-    tagline: "Visual description for Google Nano Banana, Midjourney, Flux",
+    tagline: "Visual description for Google Nano Banana and ChatGPT Images",
     icon: ImageIcon,
   },
   {
     id: "video",
     label: "Video Prompt",
-    tagline: "Temporal motion & camera path for Veo 3.1, Omni, Kling, Runway",
+    tagline: "Temporal motion & camera path for Veo 3.1 and Gemini Omni 1.1",
     icon: Video,
   },
 ];
@@ -231,17 +232,10 @@ export function PromptWorkspace() {
 
   function applyPreset(type: "ratio" | "lens", value: string) {
     if (type === "ratio") {
-      if (engineTarget === "midjourney") {
-        setPrompt((prev) => {
-          const stripped = prev.replace(/--ar\s+[0-9]+:[0-9]+/gi, "").trim();
-          return `${stripped} --ar ${value}`.trim();
-        });
-      } else {
-        setPrompt((prev) => {
-          if (prev.toLowerCase().includes(value.toLowerCase())) return prev;
-          return `${prev.trim()}, aspect ratio ${value}`.trim();
-        });
-      }
+      setPrompt((prev) => {
+        if (prev.toLowerCase().includes(value.toLowerCase())) return prev;
+        return `${prev.trim()}, aspect ratio ${value}`.trim();
+      });
     } else if (type === "lens") {
       setPrompt((prev) => {
         if (prev.toLowerCase().includes(value.toLowerCase())) return prev;
@@ -253,7 +247,7 @@ export function PromptWorkspace() {
   function handleSelectHistoryItem(item: PromptHistoryItem) {
     setPrompt(item.original);
     setKind(item.kind);
-    if (item.engineTarget) setEngineTarget(item.engineTarget);
+    if (item.engineTarget) setEngineTarget(normalizeEngineTarget(item.engineTarget));
     setResult({
       optimized: item.optimized,
       negativePrompt: item.negativePrompt,
@@ -380,8 +374,7 @@ export function PromptWorkspace() {
                 {[
                   { id: "universal", label: "Universal Video" },
                   { id: "veo", label: "Google Veo 3.1" },
-                  { id: "kling", label: "Kling 1.5/2.0" },
-                  { id: "runway", label: "Runway Gen-3" },
+                  { id: "omni", label: "Gemini Omni 1.1" },
                 ].map((eng) => (
                   <button
                     key={eng.id}
@@ -413,9 +406,8 @@ export function PromptWorkspace() {
                 <span className="font-semibold text-sky-300">Target Engine:</span>
                 {[
                   { id: "universal", label: "Universal Image" },
-                  { id: "midjourney", label: "Midjourney v6.1" },
-                  { id: "flux", label: "Flux.1" },
-                  { id: "sd", label: "Stable Diffusion" },
+                  { id: "nano-banana", label: "Nano Banana" },
+                  { id: "gpt-image", label: "ChatGPT Images" },
                 ].map((eng) => (
                   <button
                     key={eng.id}
@@ -817,6 +809,37 @@ export function PromptWorkspace() {
           </section>
         )}
 
+        {result?.rejectedDraft && (
+          <section className="rounded-xl border border-border bg-surface/40 p-4">
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <div>
+                <h4 className="text-xs font-semibold text-foreground">
+                  {result.rejectedDraft.reason === "marginal"
+                    ? "Optional rewrite (not clearly better than yours)"
+                    : "Closest rewrite (failed verification)"}
+                </h4>
+                <ul className="mt-1 space-y-0.5 text-[11px] text-muted-fg">
+                  {result.rejectedDraft.problems.map((problem, i) => (
+                    <li key={i}>• {problem}</li>
+                  ))}
+                </ul>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigator.clipboard.writeText(result.rejectedDraft!.optimized)}
+                className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-border px-2 py-1 text-[11px] text-muted-fg hover:bg-accent/10 hover:text-foreground transition"
+                title="Copy this rewrite"
+              >
+                <Copy className="h-3.5 w-3.5" />
+                Copy
+              </button>
+            </div>
+            <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded-lg bg-background/60 p-3 font-mono text-xs leading-relaxed text-foreground/90">
+              {result.rejectedDraft.optimized}
+            </pre>
+          </section>
+        )}
+
         {result && (
           <section className="space-y-4 rounded-xl border border-border bg-surface/50 p-5">
             <div>
@@ -861,6 +884,14 @@ export function PromptWorkspace() {
                     <span className="font-mono text-emerald-400 font-bold">
                       {Math.round(result.qualityGate.overEngineered * 100)}%
                     </span>
+                    {result.qualityGate.improvement !== undefined && (
+                      <>
+                        . Better than your original:{" "}
+                        <span className="font-mono text-emerald-400 font-bold">
+                          {Math.round(result.qualityGate.improvement * 100)}%
+                        </span>
+                      </>
+                    )}
                     .
                   </>
                 ) : (
@@ -874,7 +905,7 @@ export function PromptWorkspace() {
                     <span className="font-mono text-amber-300 font-bold">
                       {Math.round(result.qualityGate.overEngineered * 100)}%
                     </span>
-                    . A repaired rewrite also failed verification, so your original prompt is preserved unchanged.
+                    . A repaired rewrite also failed verification, so your original prompt is preserved unchanged; the closest rewrite is shown above.
                   </>
                 )}
               </div>

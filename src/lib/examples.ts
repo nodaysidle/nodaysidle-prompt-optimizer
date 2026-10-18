@@ -15,7 +15,7 @@ export const PROMPT_EXAMPLES: PromptExample[] = [
     prompt: `A young man power-sliding a matte black 2008 Honda CRF450R supermoto motorcycle full throttle sideways across a sun-baked cobblestone piazza in Trieste Italy with Adriatic Sea background, tire smoke billowing, pedestrian crowd reacting in awe, harsh midday sun, photorealistic Canon EOS R5.`,
   },
   {
-    title: "Kling / Runway FPV Chase",
+    title: "Veo / Omni FPV Chase",
     kind: "video",
     description: "High-speed camera path through neon cyber city",
     prompt: `FPV drone descending through misty cyberpunk neon canyon, chasing an agile futuristic hoverbike through narrow wet alleyways with neon reflection puddles, rapid banking turns, sparks flying from wall scrapes, cinematic anamorphic lens.`,
@@ -53,7 +53,7 @@ export const PROMPT_EXAMPLES: PromptExample[] = [
   {
     title: "Photo Identity Lock (Video)",
     kind: "video",
-    description: "Attachment likeness reference lock for Veo / Kling motion",
+    description: "Attachment likeness reference lock for Veo / Omni motion",
     prompt: `The subject in the photo... turning towards camera with a subtle smile in a sunlit modern art gallery, slow-motion tracking shot, soft natural rim lighting`,
   },
 ];

@@ -20,16 +20,22 @@ export interface DiagnosticResult {
 
 export type EngineTarget =
   | "universal"
-  | "midjourney"
-  | "flux"
-  | "sd"
+  | "nano-banana"
+  | "gpt-image"
   | "veo"
-  | "kling"
-  | "runway";
+  | "omni";
+
+export const ENGINE_TARGETS: readonly EngineTarget[] = ["universal", "nano-banana", "gpt-image", "veo", "omni"];
+
+/** Older saved history items may carry retired targets (midjourney, flux, ...); treat them as universal. */
+export function normalizeEngineTarget(value: unknown): EngineTarget {
+  return ENGINE_TARGETS.includes(value as EngineTarget) ? (value as EngineTarget) : "universal";
+}
 
 export interface QualityGateResult {
   intentPreserved: number; // 0..1
   overEngineered: number; // 0..1
+  improvement?: number; // 0..1, is the rewrite more likely to get the intended result than the original
   passed: boolean;
   judge?: string;
 }
@@ -43,6 +49,16 @@ export interface OptimizationResult {
   qualityGate?: QualityGateResult;
   suggestedKind?: PromptKind;
   unresolvedQuestions?: string[];
+  /** Set when the original prompt is returned: the closest rewrite, for the user to judge. */
+  rejectedDraft?: RejectedDraft;
+}
+
+export interface RejectedDraft {
+  optimized: string;
+  negativePrompt?: string;
+  /** "failed": both rewrites failed verification; "marginal": the rewrite passed but was not clearly better. */
+  reason: "failed" | "marginal";
+  problems: string[];
 }
 
 export interface PromptHistoryItem {
@@ -66,7 +82,7 @@ export interface AppSettings {
 
 export const DEFAULT_SETTINGS: AppSettings = {
   deepseekApiKey: "",
-  deepseekModel: "deepseek-chat",
+  deepseekModel: "deepseek-v4.1-flash",
   openrouterApiKey: "",
   autoDiagnose: true,
 };

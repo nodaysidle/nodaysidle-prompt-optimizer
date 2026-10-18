@@ -6,20 +6,20 @@ export const DEFAULT_MODEL = "deepseek-v4.1-flash";
 const FLASH = { openrouter: "deepseek/deepseek-v4.1-flash", direct: "deepseek-flash" };
 const PRO = { openrouter: "deepseek/deepseek-v4-pro", direct: "deepseek-v4-pro" };
 
-/** Exact allowlist: the server's own keys must not run any other (pricier) model. */
-const ALLOWED_MODELS: Record<string, { openrouter: string; direct: string }> = {
-  "deepseek-v4.1-flash": FLASH,
-  "deepseek/deepseek-v4.1-flash": FLASH,
-  "deepseek-flash": FLASH,
-  "deepseek-chat": FLASH, // older saved choice
-  "deepseek-v4-pro": PRO,
-  "deepseek/deepseek-v4-pro": PRO,
-  "deepseek-reasoner": PRO, // older saved choice
-};
+/** Exact allowlist (a Map, so inherited keys like "constructor" can't match): no other model runs on the server keys. */
+const ALLOWED_MODELS = new Map<string, { openrouter: string; direct: string }>([
+  ["deepseek-v4.1-flash", FLASH],
+  ["deepseek/deepseek-v4.1-flash", FLASH],
+  ["deepseek-flash", FLASH],
+  ["deepseek-chat", FLASH], // older saved choice
+  ["deepseek-v4-pro", PRO],
+  ["deepseek/deepseek-v4-pro", PRO],
+  ["deepseek-reasoner", PRO], // older saved choice
+]);
 
 /** Maps the model chosen in Settings to the id each provider expects; anything else falls back to V4.1 Flash. */
-export function resolveModels(model?: string): { openrouter: string; direct: string } {
-  return ALLOWED_MODELS[(model || DEFAULT_MODEL).trim()] ?? FLASH;
+export function resolveModels(model?: unknown): { openrouter: string; direct: string } {
+  return (typeof model === "string" && ALLOWED_MODELS.get(model.trim())) || FLASH;
 }
 
 export interface DeepSeekChatParams {

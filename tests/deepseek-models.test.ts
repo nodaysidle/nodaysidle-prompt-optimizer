@@ -21,5 +21,7 @@ describe("resolveModels", () => {
     expect(resolveModels("claude-opus").direct).toBe("deepseek-flash");
     expect(resolveModels("deepseek/deepseek-v4.1-flash:batch").openrouter).toBe("deepseek/deepseek-v4.1-flash");
     expect(resolveModels("deepseek-v3.2").openrouter).toBe("deepseek/deepseek-v4.1-flash");
+    expect(resolveModels("constructor")).toEqual({ openrouter: "deepseek/deepseek-v4.1-flash", direct: "deepseek-flash" });
+    expect(resolveModels(42)).toEqual({ openrouter: "deepseek/deepseek-v4.1-flash", direct: "deepseek-flash" });
   });
 });

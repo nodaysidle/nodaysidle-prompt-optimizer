@@ -3,26 +3,23 @@ const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 export const DEFAULT_MODEL = "deepseek-v4.1-flash";
 
-/**
- * Maps the model chosen in Settings to the id each provider expects.
- * Older saved choices (deepseek-chat, deepseek-reasoner) map to their V4 successors.
- */
+const FLASH = { openrouter: "deepseek/deepseek-v4.1-flash", direct: "deepseek-flash" };
+const PRO = { openrouter: "deepseek/deepseek-v4-pro", direct: "deepseek-v4-pro" };
+
+/** Exact allowlist: the server's own keys must not run any other (pricier) model. */
+const ALLOWED_MODELS: Record<string, { openrouter: string; direct: string }> = {
+  "deepseek-v4.1-flash": FLASH,
+  "deepseek/deepseek-v4.1-flash": FLASH,
+  "deepseek-flash": FLASH,
+  "deepseek-chat": FLASH, // older saved choice
+  "deepseek-v4-pro": PRO,
+  "deepseek/deepseek-v4-pro": PRO,
+  "deepseek-reasoner": PRO, // older saved choice
+};
+
+/** Maps the model chosen in Settings to the id each provider expects; anything else falls back to V4.1 Flash. */
 export function resolveModels(model?: string): { openrouter: string; direct: string } {
-  const m = (model || DEFAULT_MODEL).trim();
-  // only DeepSeek models: the server's own keys must not run arbitrary (pricier) OpenRouter models
-  if (m.includes("/")) {
-    return /^deepseek\/[\w.:-]+$/.test(m)
-      ? { openrouter: m, direct: "deepseek-flash" }
-      : { openrouter: "deepseek/deepseek-v4.1-flash", direct: "deepseek-flash" };
-  }
-  if (!/^deepseek-[\w.-]+$/.test(m)) return { openrouter: "deepseek/deepseek-v4.1-flash", direct: "deepseek-flash" };
-  if (/^(deepseek-reasoner|deepseek-v4-pro)$/.test(m)) {
-    return { openrouter: "deepseek/deepseek-v4-pro", direct: "deepseek-v4-pro" };
-  }
-  if (/^(deepseek-chat|deepseek-flash|deepseek-v4\.1-flash)$/.test(m)) {
-    return { openrouter: "deepseek/deepseek-v4.1-flash", direct: "deepseek-flash" };
-  }
-  return { openrouter: `deepseek/${m}`, direct: m };
+  return ALLOWED_MODELS[(model || DEFAULT_MODEL).trim()] ?? FLASH;
 }
 
 export interface DeepSeekChatParams {

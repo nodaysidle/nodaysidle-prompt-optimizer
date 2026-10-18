@@ -12,12 +12,14 @@ describe("resolveModels", () => {
     expect(resolveModels("deepseek-reasoner")).toEqual({ openrouter: "deepseek/deepseek-v4-pro", direct: "deepseek-v4-pro" });
   });
 
-  it("passes a full OpenRouter id through unchanged", () => {
-    expect(resolveModels("deepseek/deepseek-v4-flash").openrouter).toBe("deepseek/deepseek-v4-flash");
+  it("accepts the exact OpenRouter ids of allowed models", () => {
+    expect(resolveModels("deepseek/deepseek-v4-pro").openrouter).toBe("deepseek/deepseek-v4-pro");
   });
 
   it("refuses non-DeepSeek models so server keys can't run pricier ones", () => {
     expect(resolveModels("openai/gpt-5-pro").openrouter).toBe("deepseek/deepseek-v4.1-flash");
     expect(resolveModels("claude-opus").direct).toBe("deepseek-flash");
+    expect(resolveModels("deepseek/deepseek-v4.1-flash:batch").openrouter).toBe("deepseek/deepseek-v4.1-flash");
+    expect(resolveModels("deepseek-v3.2").openrouter).toBe("deepseek/deepseek-v4.1-flash");
   });
 });

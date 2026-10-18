@@ -9,7 +9,13 @@ export const DEFAULT_MODEL = "deepseek-v4.1-flash";
  */
 export function resolveModels(model?: string): { openrouter: string; direct: string } {
   const m = (model || DEFAULT_MODEL).trim();
-  if (m.includes("/")) return { openrouter: m, direct: "deepseek-flash" };
+  // only DeepSeek models: the server's own keys must not run arbitrary (pricier) OpenRouter models
+  if (m.includes("/")) {
+    return /^deepseek\/[\w.:-]+$/.test(m)
+      ? { openrouter: m, direct: "deepseek-flash" }
+      : { openrouter: "deepseek/deepseek-v4.1-flash", direct: "deepseek-flash" };
+  }
+  if (!/^deepseek-[\w.-]+$/.test(m)) return { openrouter: "deepseek/deepseek-v4.1-flash", direct: "deepseek-flash" };
   if (/^(deepseek-reasoner|deepseek-v4-pro)$/.test(m)) {
     return { openrouter: "deepseek/deepseek-v4-pro", direct: "deepseek-v4-pro" };
   }

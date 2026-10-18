@@ -15,4 +15,9 @@ describe("resolveModels", () => {
   it("passes a full OpenRouter id through unchanged", () => {
     expect(resolveModels("deepseek/deepseek-v4-flash").openrouter).toBe("deepseek/deepseek-v4-flash");
   });
+
+  it("refuses non-DeepSeek models so server keys can't run pricier ones", () => {
+    expect(resolveModels("openai/gpt-5-pro").openrouter).toBe("deepseek/deepseek-v4.1-flash");
+    expect(resolveModels("claude-opus").direct).toBe("deepseek-flash");
+  });
 });

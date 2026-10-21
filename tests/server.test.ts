@@ -169,6 +169,23 @@ describe("every owner-funded access boundary", () => {
       expect(() => throttle(from("203.0.113.4"), 1, 1000)).not.toThrow();
     });
 
+    it("ignores forwarding headers a caller could set on another host", () => {
+      const spoof = (address: string) =>
+        request({}, { "x-vercel-forwarded-for": "", "x-forwarded-for": address, "x-real-ip": address });
+      for (let i = 0; i < 5; i += 1) expect(() => throttle(spoof("203.0.113.9"), 1, 1000)).not.toThrow();
+    });
+
+    it("does nothing, rather than share one bucket, when no address can be trusted", () => {
+      const nameless = () => new Request("http://localhost/api", { method: "POST" });
+      for (let i = 0; i < 100; i += 1) expect(() => throttle(nameless(), 1, 1000)).not.toThrow();
+    });
+
+    it("groups an IPv6 client by its /64", () => {
+      throttle(from("2001:db8:1:2:aaaa::1"), 1, 1000);
+      expect(() => throttle(from("2001:db8:1:2:bbbb::9"), 1, 1000)).toThrow("limit");
+      expect(() => throttle(from("2001:db8:1:3::1"), 1, 1000)).not.toThrow();
+    });
+
     it("a full table never locks out a new client", () => {
       for (let i = 0; i < 1100; i += 1) throttle(from(`198.51.100.${i}`), 30, 1000);
       expect(() => throttle(from("192.0.2.77"), 30, 1000)).not.toThrow();

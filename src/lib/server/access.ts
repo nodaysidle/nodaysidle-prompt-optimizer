@@ -107,27 +107,34 @@ const MAX_BUCKETS = 1000;
 const buckets = new Map<string, { count: number; reset: number }>();
 
 /**
- * Who a request counts against. Never a value the caller picks, such as a key or token
- * header: that lets one client mint unlimited identities to dodge the limit, or fill the
- * table so that everyone else is turned away. Behind Vercel the edge sets these headers
- * itself, so the first address is the real client. On a host with no such proxy a caller
- * could set them, which is why this limit is a per-instance courtesy and not a quota.
+ * Who a request counts against, or undefined when no address can be trusted.
+ * Never a value the caller picks, such as a key or token header: that lets one client mint
+ * unlimited identities to dodge the limit. Only the header Vercel's edge sets itself is
+ * trusted, because Vercel strips any value the client sent. Other forwarding headers
+ * (x-forwarded-for, x-real-ip) are ignored: on another host a caller could set them.
+ * IPv6 clients are grouped by /64, since one household or host owns a whole /64.
  */
-function clientId(req: Request): string {
-  const header =
-    req.headers.get("x-vercel-forwarded-for") ||
-    req.headers.get("x-real-ip") ||
-    req.headers.get("x-forwarded-for") ||
-    "";
-  return header.split(",")[0].trim().slice(0, 100) || "unknown";
+function clientId(req: Request): string | undefined {
+  const address = req.headers.get("x-vercel-forwarded-for")?.split(",")[0].trim();
+  if (!address) return undefined;
+  if (!address.includes(":")) return address.slice(0, 45);
+  return address.split(":").slice(0, 4).join(":").toLowerCase().slice(0, 45);
 }
 
+/**
+ * A per-instance courtesy limit, not a quota and not the control on spend (that is the
+ * access token). With no trusted address it does nothing rather than put every such caller
+ * in one shared bucket, where one client could lock the rest out.
+ */
 export function throttle(req: Request, limit = 30, now = Date.now()) {
+  const id = clientId(req);
+  if (!id) return;
   for (const [key, bucket] of buckets)
     if (bucket.reset <= now) buckets.delete(key);
-  const key = createHash("sha256").update(clientId(req)).digest("hex");
-  // A full table drops the oldest entry. It never refuses a new client: refusing would
-  // let someone who fills the table lock every other visitor out.
+  const key = createHash("sha256").update(id).digest("hex");
+  // A full table drops the oldest entry. It never refuses a new client: refusing would let
+  // whoever fills the table lock every other visitor out. Filling it needs a thousand
+  // distinct trusted addresses inside one minute, on one short-lived instance.
   if (!buckets.has(key) && buckets.size >= MAX_BUCKETS) {
     const oldest = buckets.keys().next().value;
     if (oldest !== undefined) buckets.delete(oldest);

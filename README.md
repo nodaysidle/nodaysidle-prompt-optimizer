@@ -86,4 +86,4 @@ node --env-file=.env.local evals/judge.ts --base http://127.0.0.1:3000 --out jud
 
 - Target profiles are versioned guidance for a prompt's wording. They are not integrations, and nothing here generates an image or a video.
 - The judge and the gate are model opinions, not guarantees.
-- The per-instance request limit resets on each serverless instance. It is not a shared quota.
+- The per-instance request limit counts by the client address Vercel sets, resets on each serverless instance, and does nothing where no trusted address exists. It is a courtesy, not a quota. What protects the owner's keys is the access token.

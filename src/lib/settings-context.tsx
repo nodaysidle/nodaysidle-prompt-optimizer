@@ -143,7 +143,6 @@ export function requestHeaders(settings: AppSettings) {
     "Content-Type": "application/json",
     "x-deepseek-key": settings.deepseekApiKey,
     "x-openrouter-key": settings.openrouterApiKey,
-    "x-typesafe-key": settings.typesafeApiKey,
     "x-app-access-token": settings.appAccessToken,
   };
 }

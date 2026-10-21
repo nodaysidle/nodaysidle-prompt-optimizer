@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSettings, requestHeaders } from "@/lib/settings-context";
 import {
   MODES,
@@ -21,17 +21,30 @@ import {
   composePresets,
   parsePresets,
 } from "@/lib/presets";
+import { assemble, buildRedline, editsOf } from "@/lib/redline";
+import { VERDICT_LABEL, verdictOf, type Verdict } from "@/lib/verdict";
+import {
+  IDENTITY_LOCK_OUTPUT,
+  findPreservationViolations,
+  isSubjectInPhotoPrompt,
+} from "@/lib/optimizer-prompt";
 import { BrandMark } from "./brand-mark";
 import { SettingsPanel } from "./settings-panel";
 import { HistoryDrawer } from "./history-drawer";
 import { DiagnosticsPanel } from "./diagnostics-badge";
-import { DiffViewer } from "./diff-viewer";
+import { RedlineView } from "./redline-view";
+import { ResultNotes } from "./result-notes";
+import { RunLights, type RunStage } from "./run-lights";
 import { TestModal } from "./test-modal";
 
 interface Candidate {
   result: OptimizationResult;
+  /** What was submitted. The redline always compares against this, never the live draft. */
   snapshot: DraftSnapshot;
-  text: string;
+  reverted: Set<number>;
+  /** The final prompt after hand editing; null while it is derived from the kept edits. */
+  hand: string | null;
+  showRejected: boolean;
   historical?: boolean;
 }
 interface Draft {
@@ -40,12 +53,54 @@ interface Draft {
   mode: OptimizationMode;
   engineTarget: EngineTarget;
 }
+interface Failure {
+  message: string;
+  requestId?: string;
+}
 const EMPTY_DRAFT: Draft = {
   prompt: "",
   kind: "user",
   mode: "minimal",
   engineTarget: "universal",
 };
+
+const KIND_LABEL: Record<PromptKind, string> = {
+  user: "User prompt",
+  system: "System prompt",
+  image: "Image prompt",
+  video: "Video prompt",
+};
+const KIND_HINT: Record<PromptKind, string> = {
+  user: "A question or task for ChatGPT, Claude, Cursor or a similar assistant.",
+  system: "Rules and persona that govern an AI agent.",
+  image: "A still picture, for Nano Banana or ChatGPT Images.",
+  video: "A shot, for Veo 3.1 or Gemini Omni.",
+};
+const MODE_LABEL: Record<OptimizationMode, string> = {
+  minimal: "Light edit",
+  structured: "Restructure",
+  creative: "Allow additions",
+};
+const MODE_HINT: Record<OptimizationMode, string> = {
+  minimal: "The smallest useful edit. No invented context or extra requirements.",
+  structured: "Organize what you wrote. No new facts.",
+  creative: "Optional additions, listed as assumptions. Your hard constraints still apply.",
+};
+const VERDICT_DETAIL: Record<Verdict, string> = {
+  kept: "The rewrite did not pass verification, or was not clearly better, so your prompt is unchanged.",
+  checked: "The judge model found your intent kept and no bloat, and the built-in checks passed.",
+  review: "Something the checks flagged is listed under Worth a second look.",
+  unchecked: "No judge model was available, so only the built-in checks ran.",
+};
+
+class RunFailure extends Error {
+  constructor(
+    message: string,
+    public requestId?: string,
+  ) {
+    super(message);
+  }
+}
 
 async function requestDiagnostics(
   draft: Draft,
@@ -56,30 +111,59 @@ async function requestDiagnostics(
     method: "POST",
     headers: requestHeaders(settings),
     signal,
-    body: JSON.stringify({
-      prompt: draft.prompt,
-      kind: draft.kind,
-      diagnosticSource: settings.diagnosticSource,
-      allowLocalFallback: settings.allowLocalFallback,
-    }),
+    body: JSON.stringify({ prompt: draft.prompt, kind: draft.kind }),
   });
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error || "Diagnostics failed.");
+  if (!response.ok) throw new Error(data.error || "Reading the draft failed.");
   return data;
 }
 
-function candidateLabel(candidate: Candidate | null, stale: boolean): string {
-  if (!candidate) return "No rewrite yet";
-  if (stale) return "Stale or edited, review required";
-  switch (candidate.result.qualityGate.state) {
-    case "passed":
-      return "Preservation check passed, not guaranteed";
-    case "needsReview":
-      return "Needs review";
-    case "unavailable":
-      return "Unverified";
+/** Reads the optimize stream: one line per real stage, then a result or an error. */
+async function readRun(
+  response: Response,
+  onStage: (stage: RunStage) => void,
+): Promise<OptimizationResult> {
+  if (!response.ok || !response.body) {
+    const data = await response.json().catch(() => ({}));
+    throw new RunFailure(data.error || "The run failed.", data.requestId);
   }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let result: OptimizationResult | undefined;
+  const handle = (line: string) => {
+    if (!line.trim()) return;
+    const event = JSON.parse(line);
+    if (event.stage) onStage(event.stage as RunStage);
+    if (event.result) result = event.result as OptimizationResult;
+    if (event.error) throw new RunFailure(event.error, event.requestId);
+  };
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    lines.forEach(handle);
+  }
+  handle(buffer);
+  if (!result) throw new RunFailure("The run ended without a result.");
+  return result;
 }
+
+/** Lines a hand-picked final text must still satisfy, so a revert cannot silently drop them. */
+function protectedProblems(snapshot: DraftSnapshot, finalText: string): string[] {
+  const problems = findPreservationViolations(snapshot.prompt, finalText);
+  const visual = snapshot.kind === "image" || snapshot.kind === "video";
+  if (
+    visual &&
+    isSubjectInPhotoPrompt(snapshot.prompt) &&
+    !finalText.trim().startsWith(IDENTITY_LOCK_OUTPUT)
+  )
+    problems.push("The reference-photo line is missing, so likeness is no longer requested.");
+  return problems;
+}
+
 export function PromptWorkspace() {
   const { settings, server, error: settingsError } = useSettings();
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
@@ -89,14 +173,14 @@ export function PromptWorkspace() {
     data: DiagnosticResult | null;
     key: string;
   }>({ data: null, key: "" });
-  const [loadingKey, setLoadingKey] = useState<string | null>(null);
+  const [stage, setStage] = useState<RunStage>("idle");
+  const [running, setRunning] = useState(false);
   const [diagnosingKey, setDiagnosingKey] = useState<string | null>(null);
-  const [error, setError] = useState("");
+  const [failure, setFailure] = useState<Failure | null>(null);
   const [notice, setNotice] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<PromptHistoryItem[]>([]);
-  const [diff, setDiff] = useState(false);
   const [testOpen, setTestOpen] = useState(false);
   const [testDraft, setTestDraft] = useState(false);
   const [question, setQuestion] = useState("");
@@ -108,6 +192,8 @@ export function PromptWorkspace() {
   const diagnosticId = useRef(0);
   const optimizeId = useRef(0);
   const textarea = useRef<HTMLTextAreaElement | null>(null);
+  const redlineHeading = useRef<HTMLHeadingElement | null>(null);
+
   const snapshot: DraftSnapshot = {
     ...draft,
     profileVersion: PROFILES[draft.engineTarget].version,
@@ -116,20 +202,42 @@ export function PromptWorkspace() {
   const contextKey = JSON.stringify([draft, settings]);
   const diagnostics =
     diagnosticState.key === contextKey ? diagnosticState.data : null;
-  const loading = loadingKey === contextKey;
   const diagnosing = diagnosingKey === contextKey;
+  const visual = draft.kind === "image" || draft.kind === "video";
+  const canRun = Boolean(
+    settings.deepseekApiKey ||
+      settings.openrouterApiKey ||
+      (settings.appAccessToken && (server?.deepseek || server?.openrouter)),
+  );
+
+  // The redline is derived from what was submitted and what came back, nothing else.
+  const target = candidate
+    ? candidate.showRejected && candidate.result.rejectedDraft
+      ? candidate.result.rejectedDraft.optimized
+      : candidate.result.optimized
+    : "";
+  const segments = useMemo(
+    () => (candidate ? buildRedline(candidate.snapshot.prompt, target) : []),
+    [candidate, target],
+  );
+  const edits = editsOf(segments);
+  const finalText = candidate
+    ? (candidate.hand ?? assemble(segments, candidate.reverted))
+    : "";
   const stale =
     candidate &&
-    (JSON.stringify(candidate.snapshot) !== JSON.stringify(snapshot) ||
-      candidate.text !== candidate.result.optimized ||
-      candidate.historical);
+    (candidate.historical ||
+      JSON.stringify(candidate.snapshot) !== JSON.stringify(snapshot));
+  const problems = candidate ? protectedProblems(candidate.snapshot, finalText) : [];
+
   function cancel() {
     if (diagnosticTimer.current) clearTimeout(diagnosticTimer.current);
     diagnosticId.current++;
     optimizeId.current++;
     diagnosticController.current?.abort();
     optimizeController.current?.abort();
-    setLoadingKey(null);
+    setRunning(false);
+    setStage("idle");
     setDiagnosingKey(null);
     setDiagnosticState({ data: null, key: "" });
     setTestOpen(false);
@@ -140,14 +248,14 @@ export function PromptWorkspace() {
     setDraft(next);
     setQuestion("");
     setAnswer("");
-    setError("");
+    setFailure(null);
     if (clearResult) setCandidate(null);
   }
   function refreshHistory() {
     try {
       setHistory(loadHistory());
     } catch (e) {
-      setError(e instanceof Error ? e.message : "History unavailable.");
+      setFailure({ message: e instanceof Error ? e.message : "History unavailable." });
     }
   }
   useEffect(() => {
@@ -167,16 +275,12 @@ export function PromptWorkspace() {
     const timer = setTimeout(async () => {
       setDiagnosingKey(contextKey);
       try {
-        const data = await requestDiagnostics(
-          draft,
-          settings,
-          controller.signal,
-        );
+        const data = await requestDiagnostics(draft, settings, controller.signal);
         if (diagnosticId.current === id && !controller.signal.aborted)
           setDiagnosticState({ data, key: contextKey });
       } catch (e) {
         if (diagnosticId.current === id && !controller.signal.aborted)
-          setError(e instanceof Error ? e.message : "Diagnostics unavailable.");
+          setFailure({ message: e instanceof Error ? e.message : "Reading the draft failed." });
       } finally {
         if (diagnosticId.current === id) setDiagnosingKey(null);
       }
@@ -187,6 +291,7 @@ export function PromptWorkspace() {
       controller.abort();
     };
   }, [draft, settings, contextKey]);
+
   async function diagnose() {
     if (diagnosticTimer.current) clearTimeout(diagnosticTimer.current);
     diagnosticController.current?.abort();
@@ -199,66 +304,88 @@ export function PromptWorkspace() {
     const controller = new AbortController();
     diagnosticController.current = controller;
     setDiagnosingKey(contextKey);
-    setError("");
+    setFailure(null);
     try {
       const data = await requestDiagnostics(draft, settings, controller.signal);
       if (id === diagnosticId.current && !controller.signal.aborted)
         setDiagnosticState({ data, key: contextKey });
     } catch (e) {
       if (id === diagnosticId.current && !controller.signal.aborted)
-        setError(e instanceof Error ? e.message : "Diagnostics failed.");
+        setFailure({ message: e instanceof Error ? e.message : "Reading the draft failed." });
     } finally {
       if (id === diagnosticId.current) setDiagnosingKey(null);
     }
   }
+
   async function optimize() {
+    if (!draft.prompt.trim() || !canRun) return;
     optimizeController.current?.abort();
     const id = ++optimizeId.current;
     const frozen = { ...snapshot };
     const controller = new AbortController();
     optimizeController.current = controller;
-    setLoadingKey(contextKey);
-    setError("");
+    setRunning(true);
+    setStage("sent");
+    setFailure(null);
     setNotice("");
     setTestOpen(false);
     try {
       const response = await fetch("/api/optimize", {
         method: "POST",
-        headers: requestHeaders(settings),
+        headers: { ...requestHeaders(settings), Accept: "application/x-ndjson" },
         signal: controller.signal,
-        body: JSON.stringify({
-          ...frozen,
-          diagnosticSource: settings.diagnosticSource,
-          allowLocalFallback: settings.allowLocalFallback,
-        }),
+        body: JSON.stringify(frozen),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Rewrite failed.");
+      const result = await readRun(response, (next) => {
+        if (id === optimizeId.current) setStage(next);
+      });
       if (id !== optimizeId.current || controller.signal.aborted) return;
-      const result = data as OptimizationResult;
-      setCandidate({ result, snapshot: frozen, text: result.optimized });
+      setCandidate({
+        result,
+        snapshot: frozen,
+        reverted: new Set(),
+        hand: null,
+        showRejected: false,
+      });
+      // On a phone the result sits far below the draft; take the reader to it.
+      requestAnimationFrame(() => redlineHeading.current?.focus());
       try {
         saveHistoryItem({ ...result, ...frozen, original: frozen.prompt });
         refreshHistory();
       } catch {
-        setError(
-          "Candidate is ready, but could not be saved locally. Browser storage may be full or disabled.",
+        setNotice(
+          "The result is ready, but it could not be saved to history. Browser storage may be full or disabled.",
         );
       }
     } catch (e) {
       if (id === optimizeId.current && !controller.signal.aborted)
-        setError(e instanceof Error ? e.message : "Rewrite failed.");
+        setFailure(
+          e instanceof RunFailure
+            ? { message: e.message, requestId: e.requestId }
+            : { message: e instanceof Error ? e.message : "The run failed." },
+        );
     } finally {
-      if (id === optimizeId.current) setLoadingKey(null);
+      if (id === optimizeId.current) {
+        setRunning(false);
+        setStage("idle");
+      }
     }
   }
+
   async function copy(value: string) {
     try {
       await navigator.clipboard.writeText(value);
       setNotice("Copied.");
     } catch {
-      setError("Clipboard unavailable. Select the text and copy manually.");
+      setFailure({ message: "The clipboard is unavailable. Select the text and copy it by hand." });
     }
+  }
+  function toggleEdit(id: number) {
+    if (!candidate) return;
+    const reverted = new Set(candidate.reverted);
+    if (reverted.has(id)) reverted.delete(id);
+    else reverted.add(id);
+    setCandidate({ ...candidate, reverted });
   }
   function restore(item: PromptHistoryItem) {
     changeDraft(
@@ -280,34 +407,31 @@ export function PromptWorkspace() {
         profileVersion: item.profileVersion,
         model: item.model,
       },
-      text: item.optimized,
+      reverted: new Set(),
+      hand: null,
+      showRejected: false,
       historical: true,
     });
     setHistoryOpen(false);
   }
-  const visual = draft.kind === "image" || draft.kind === "video";
-  const connection = settings.deepseekApiKey
-    ? "BYOK configured"
-    : settings.appAccessToken && server?.deepseek
-      ? "Protected shared access supplied, test in Settings"
-      : server?.deepseek
-        ? "Protected shared access requires owner token"
-        : "Rewrite access not configured";
+
+  const verdict = candidate ? verdictOf(candidate.result) : null;
+  const keptCount = edits.length - (candidate?.reverted.size ?? 0);
+
   return (
     <>
       <a className="skip-link" href="#draft">
-        Skip to draft editor
+        Skip to the prompt editor
       </a>
-      <header className="workbench-header">
+      <header className="bar">
         <div className="brand">
-          <BrandMark className="size-7" />
-          <div>
-            <span>NODAYSIDLE</span>
-            <h1>Prompt workbench</h1>
-          </div>
+          <BrandMark className="brand-mark" />
+          <span className="brand-name">NODAYSIDLE</span>
+          <h1 className="brand-tool">Prompt Optimizer</h1>
         </div>
-        <nav aria-label="Workbench">
+        <nav aria-label="Optimizer">
           <button
+            type="button"
             onClick={() => {
               refreshHistory();
               setHistoryOpen(true);
@@ -315,524 +439,472 @@ export function PromptWorkspace() {
           >
             History
           </button>
-          <button onClick={() => setSettingsOpen(true)}>Settings</button>
+          <button type="button" onClick={() => setSettingsOpen(true)}>
+            Settings
+          </button>
         </nav>
       </header>
-      <main className="workbench-main">
-        <div className="connection">
-          <p>
-            {connection} · {settings.deepseekModel}
-          </p>
-          <p className="help">
-            Diagnostics:{" "}
-            {settings.diagnosticSource === "local"
-              ? "App-server heuristics, no AI-provider transmission"
-              : `${settings.diagnosticSource}, explicit AI-provider data sharing`}
-          </p>
-        </div>
-        <div className="control-grid">
-          <div>
-            <label htmlFor="kind">Prompt type</label>
-            <select
-              id="kind"
-              value={draft.kind}
-              onChange={(e) =>
-                changeDraft({
-                  ...draft,
-                  kind: e.target.value as PromptKind,
-                  engineTarget: "universal",
-                })
-              }
-            >
+
+      <main className="stage">
+        <section className="column" aria-label="Your prompt">
+          <h2 className="section-title">Your prompt</h2>
+
+          <fieldset className="choice">
+            <legend>Prompt type</legend>
+            <div className="seg">
               {PROMPT_KINDS.map((kind) => (
-                <option key={kind}>{kind}</option>
+                <button
+                  key={kind}
+                  type="button"
+                  aria-pressed={draft.kind === kind}
+                  onClick={() =>
+                    changeDraft({ ...draft, kind, engineTarget: "universal" })
+                  }
+                >
+                  {KIND_LABEL[kind]}
+                </button>
               ))}
-            </select>
-          </div>
-          <div>
-            <label htmlFor="mode">Optimization mode</label>
-            <select
-              id="mode"
-              value={draft.mode}
-              onChange={(e) =>
-                changeDraft({
-                  ...draft,
-                  mode: e.target.value as OptimizationMode,
-                })
-              }
-            >
+            </div>
+            <p className="help">{KIND_HINT[draft.kind]}</p>
+          </fieldset>
+
+          <fieldset className="choice">
+            <legend>How far to go</legend>
+            <div className="seg">
               {MODES.map((mode) => (
-                <option key={mode}>{mode}</option>
+                <button
+                  key={mode}
+                  type="button"
+                  aria-pressed={draft.mode === mode}
+                  onClick={() => changeDraft({ ...draft, mode })}
+                >
+                  {MODE_LABEL[mode]}
+                </button>
               ))}
-            </select>
-          </div>
-          <div>
-            <label htmlFor="profile">Versioned target profile</label>
-            <select
-              id="profile"
-              value={draft.engineTarget}
-              onChange={(e) =>
-                changeDraft({
-                  ...draft,
-                  engineTarget: e.target.value as EngineTarget,
-                })
-              }
-            >
-              {Object.entries(PROFILES)
-                .filter(([, profile]) => profile.kinds.includes(draft.kind))
-                .map(([key, profile]) => (
-                  <option key={key} value={key}>
-                    {profile.label}
-                  </option>
-                ))}
-            </select>
-          </div>
-        </div>
-        <p className="help">
-          {draft.mode === "minimal"
-            ? "Smallest useful edit. No invented context or extra requirements."
-            : draft.mode === "structured"
-              ? "Organize supplied information without adding facts."
-              : "Optional creative expansion, with assumptions listed separately. Hard constraints still apply."}
-        </p>
-        <div className="editor-grid">
-          <section className="editor-pane">
+            </div>
+            <p className="help">{MODE_HINT[draft.mode]}</p>
+          </fieldset>
+
+          {visual && (
+            <div className="choice">
+              <label htmlFor="profile">Writing for</label>
+              <select
+                id="profile"
+                value={draft.engineTarget}
+                onChange={(e) =>
+                  changeDraft({ ...draft, engineTarget: e.target.value as EngineTarget })
+                }
+              >
+                {Object.entries(PROFILES)
+                  .filter(([, profile]) => profile.kinds.includes(draft.kind))
+                  .map(([key, profile]) => (
+                    <option key={key} value={key}>
+                      {profile.label}
+                    </option>
+                  ))}
+              </select>
+              <p className="help">{PROFILES[draft.engineTarget].status}.</p>
+            </div>
+          )}
+
+          <div className="choice">
             <div className="pane-heading">
-              <label htmlFor="draft">Your draft</label>
-              <span className="help">
-                {draft.prompt.length}/20000 characters
-              </span>
+              <label htmlFor="draft">Draft</label>
+              <span className="help">{draft.prompt.length} of 20000 characters</span>
             </div>
             <textarea
               ref={textarea}
               id="draft"
+              className="prompt-text"
+              rows={12}
               maxLength={20000}
               value={draft.prompt}
-              onChange={(e) =>
-                changeDraft({ ...draft, prompt: e.target.value })
-              }
-            />
-            <div className="action-row">
-              <button
-                className="primary"
-                disabled={loading || !draft.prompt.trim()}
-                onClick={optimize}
-              >
-                {loading ? "Rewriting…" : "Rewrite draft"}
-              </button>
-              <button
-                disabled={!draft.prompt}
-                onClick={() =>
-                  changeDraft({ ...draft, prompt: "" }, true, true)
+              aria-describedby="draft-help"
+              onChange={(e) => changeDraft({ ...draft, prompt: e.target.value })}
+              onKeyDown={(e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                  e.preventDefault();
+                  void optimize();
                 }
-              >
-                Clear draft
+              }}
+            />
+            <p className="help" id="draft-help">
+              Paste what you have. Ctrl+Enter runs it.
+            </p>
+          </div>
+
+          <div className="run">
+            <button
+              type="button"
+              className="primary"
+              disabled={running || !draft.prompt.trim() || !canRun}
+              onClick={optimize}
+            >
+              {running ? "Optimizing" : "Optimize prompt"}
+            </button>
+            <RunLights stage={stage} />
+          </div>
+          {!canRun && (
+            <p className="help" role="note">
+              Add a DeepSeek or OpenRouter key to run the optimizer. Keys stay in this
+              tab unless you choose to remember them.{" "}
+              <button type="button" className="link" onClick={() => setSettingsOpen(true)}>
+                Open Settings
               </button>
-              <button
-                disabled={!draft.prompt}
-                onClick={() => copy(draft.prompt)}
-              >
-                Copy draft
-              </button>
-              <button
-                disabled={!undo}
-                onClick={() => {
-                  if (undo) {
-                    const previous = undo;
-                    changeDraft(previous);
-                    setUndo(null);
-                    setNotice("Draft replacement undone.");
-                  }
-                }}
-              >
-                Undo replacement
-              </button>
-              <button
-                disabled={visual || !draft.prompt.trim()}
-                onClick={() => {
-                  setTestDraft(true);
-                  setTestOpen(true);
-                }}
-              >
-                Test draft text
-              </button>
-            </div>
-            <details>
-              <summary>Examples and visual controls</summary>
-              <label htmlFor="examples">
-                Example for this prompt type (replaces draft, Undo available)
-              </label>
-              <select
-                id="examples"
-                value=""
-                onChange={(e) => {
-                  const example = PROMPT_EXAMPLES[Number(e.target.value)];
-                  if (example) {
+            </p>
+          )}
+
+          <div className="action-row">
+            <button
+              type="button"
+              disabled={!draft.prompt}
+              onClick={() => changeDraft({ ...draft, prompt: "" }, true, true)}
+            >
+              Clear draft
+            </button>
+            <button type="button" disabled={!draft.prompt} onClick={() => copy(draft.prompt)}>
+              Copy draft
+            </button>
+            <button
+              type="button"
+              disabled={!undo}
+              onClick={() => {
+                if (undo) {
+                  changeDraft(undo);
+                  setUndo(null);
+                  setNotice("Replacement undone.");
+                }
+              }}
+            >
+              Undo replacement
+            </button>
+            <button
+              type="button"
+              disabled={visual || !draft.prompt.trim()}
+              onClick={() => {
+                setTestDraft(true);
+                setTestOpen(true);
+              }}
+            >
+              Test the draft
+            </button>
+          </div>
+
+          <details>
+            <summary>Examples and visual options</summary>
+            <label htmlFor="examples">
+              Example for this prompt type (replaces the draft; Undo is available)
+            </label>
+            <select
+              id="examples"
+              value=""
+              onChange={(e) => {
+                const example = PROMPT_EXAMPLES[Number(e.target.value)];
+                if (example) {
+                  changeDraft(
+                    {
+                      ...draft,
+                      prompt: example.prompt,
+                      kind: example.kind,
+                      engineTarget: example.engineTarget || "universal",
+                    },
+                    true,
+                    true,
+                  );
+                  setNotice("Example loaded. Undo replacement restores your draft.");
+                }
+              }}
+            >
+              <option value="">Choose an example</option>
+              {PROMPT_EXAMPLES.map((example, index) =>
+                example.kind === draft.kind ? (
+                  <option value={index} key={example.title}>
+                    {example.title}
+                  </option>
+                ) : null,
+              )}
+            </select>
+            {visual && (
+              <>
+                <label htmlFor="ratio">One aspect ratio</label>
+                <select
+                  id="ratio"
+                  value={ratio}
+                  onChange={(e) =>
                     changeDraft(
                       {
                         ...draft,
-                        prompt: example.prompt,
-                        kind: example.kind,
-                        engineTarget: example.engineTarget || "universal",
+                        prompt: composePresets(draft.prompt, draft.engineTarget, e.target.value, lens),
                       },
                       true,
-                      true,
-                    );
-                    setNotice(
-                      "Example loaded. Undo replacement restores your draft.",
-                    );
+                    )
                   }
+                >
+                  <option value="">No added ratio</option>
+                  {Array.from(
+                    new Set(["16:9", "9:16", "1:1", "4:5", ...(ratio ? [ratio] : [])]),
+                  ).map((value) => (
+                    <option key={value}>{value}</option>
+                  ))}
+                </select>
+                <label htmlFor="lens">One lens</label>
+                <select
+                  id="lens"
+                  value={lens}
+                  onChange={(e) =>
+                    changeDraft(
+                      {
+                        ...draft,
+                        prompt: composePresets(draft.prompt, draft.engineTarget, ratio, e.target.value),
+                      },
+                      true,
+                    )
+                  }
+                >
+                  <option value="">No added lens</option>
+                  {Array.from(
+                    new Set(["35mm", "85mm", "24mm anamorphic", "100mm macro", ...(lens ? [lens] : [])]),
+                  ).map((value) => (
+                    <option key={value}>{value}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const prompt = addReferencePhotoInstruction(draft.prompt);
+                    if (prompt !== draft.prompt) changeDraft({ ...draft, prompt }, true);
+                  }}
+                >
+                  Add reference-photo line
+                </button>
+                <p className="help">
+                  The line asks for the likeness to be kept. It is not a guarantee, and no
+                  photo is sent from this app.
+                </p>
+              </>
+            )}
+          </details>
+
+          <DiagnosticsPanel
+            diagnostics={diagnostics}
+            loading={diagnosing}
+            onRefresh={diagnose}
+            onQuestion={(value) => {
+              setQuestion(value);
+              setAnswer("");
+            }}
+          />
+          {question && (
+            <section className="question-answer">
+              <label htmlFor="context-answer">{question}</label>
+              <textarea
+                id="context-answer"
+                value={answer}
+                onChange={(e) => setAnswer(e.target.value)}
+                maxLength={2000}
+              />
+              <button
+                type="button"
+                disabled={!answer.trim() || draft.prompt.length + answer.length + 12 > 20000}
+                onClick={() => {
+                  changeDraft(
+                    { ...draft, prompt: `${draft.prompt}\n\nContext: ${answer.trim()}` },
+                    true,
+                  );
+                  textarea.current?.focus();
                 }}
               >
-                <option value="">Choose an example</option>
-                {PROMPT_EXAMPLES.map((example, index) =>
-                  example.kind === draft.kind ? (
-                    <option value={index} key={example.title}>
-                      {example.title}
-                    </option>
-                  ) : null,
-                )}
-              </select>
-              {visual && (
-                <>
-                  <label htmlFor="ratio">One aspect ratio</label>
-                  <select
-                    id="ratio"
-                    value={ratio}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      changeDraft(
-                        {
-                          ...draft,
-                          prompt: composePresets(
-                            draft.prompt,
-                            draft.engineTarget,
-                            value,
-                            lens,
-                          ),
-                        },
-                        true,
-                      );
-                    }}
-                  >
-                    <option value="">No added ratio</option>
-                    {Array.from(
-                      new Set([
-                        "16:9",
-                        "9:16",
-                        "1:1",
-                        "4:5",
-                        ...(ratio ? [ratio] : []),
-                      ]),
-                    ).map((value) => (
-                      <option key={value}>{value}</option>
-                    ))}
-                  </select>
-                  <label htmlFor="lens">One lens</label>
-                  <select
-                    id="lens"
-                    value={lens}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      changeDraft(
-                        {
-                          ...draft,
-                          prompt: composePresets(
-                            draft.prompt,
-                            draft.engineTarget,
-                            ratio,
-                            value,
-                          ),
-                        },
-                        true,
-                      );
-                    }}
-                  >
-                    <option value="">No added lens</option>
-                    {Array.from(
-                      new Set([
-                        "35mm",
-                        "85mm",
-                        "24mm anamorphic",
-                        "100mm macro",
-                        ...(lens ? [lens] : []),
-                      ]),
-                    ).map((value) => (
-                      <option key={value}>{value}</option>
-                    ))}
-                  </select>
-                  <button
-                    onClick={() => {
-                      const prompt = addReferencePhotoInstruction(draft.prompt);
-                      if (prompt !== draft.prompt)
-                        changeDraft({ ...draft, prompt }, true);
-                    }}
-                  >
-                    Add reference-photo instruction
-                  </button>
-                  <p className="help">
-                    Reference instructions request likeness preservation, not an
-                    exact identity guarantee. No attachment is transmitted by
-                    this app.
-                  </p>
-                </>
+                Add my answer to the draft
+              </button>
+            </section>
+          )}
+        </section>
+
+        <section className="column" aria-label="Redline">
+          <h2 className="section-title" tabIndex={-1} ref={redlineHeading}>
+            Redline
+          </h2>
+
+          <p className="feedback" role="status" aria-live="polite">
+            {notice || settingsError}
+          </p>
+
+          {failure && (
+            <div className="failure" role="alert">
+              <p>
+                <strong>That did not work.</strong> {failure.message}
+              </p>
+              {failure.requestId && <p className="help">Request {failure.requestId}</p>}
+              {canRun && draft.prompt.trim() && !running && (
+                <button type="button" onClick={optimize}>
+                  Run again
+                </button>
               )}
-            </details>
-          </section>
-          <section
-            className="editor-pane result-pane"
-            aria-label="Candidate result"
-          >
-            <div className="pane-heading">
-              {candidate ? (
-                <label htmlFor="candidate">Candidate</label>
-              ) : (
-                <h2>Candidate</h2>
-              )}
-              <span className="help">
-                {candidateLabel(candidate, Boolean(stale))}
-              </span>
             </div>
-            {candidate ? (
-              <>
+          )}
+
+          {!candidate && !running && !failure && (
+            <div className="empty">
+              <p>
+                Run the optimizer and the result lands here as edits to your own words.
+                Keep the ones you want, revert the rest, then copy the final prompt.
+              </p>
+              <p className="help">
+                Short, clear prompts often come back unchanged. That is a valid result.
+              </p>
+            </div>
+          )}
+
+          {running && !candidate && (
+            <div className="empty">
+              <p>Working on it. Edit or clear the draft to cancel.</p>
+            </div>
+          )}
+
+          {candidate && verdict && (
+            <>
+              <p className="verdict" data-verdict={verdict}>
+                <strong>{VERDICT_LABEL[verdict]}.</strong> {VERDICT_DETAIL[verdict]}
+              </p>
+              {stale && (
+                <p className="stale" role="note">
+                  {candidate.historical
+                    ? "Loaded from history. "
+                    : "You changed the draft or the settings after this run. "}
+                  The redline compares against the prompt that was submitted, shown below.
+                </p>
+              )}
+
+              {candidate.result.rejectedDraft && (
+                <div className="kept-note">
+                  {candidate.result.rejectedDraft.problems.length > 0 && (
+                    <p>Why: {candidate.result.rejectedDraft.problems.join("; ")}.</p>
+                  )}
+                  <button
+                    type="button"
+                    aria-pressed={candidate.showRejected}
+                    onClick={() =>
+                      setCandidate({
+                        ...candidate,
+                        showRejected: !candidate.showRejected,
+                        reverted: new Set(),
+                        hand: null,
+                      })
+                    }
+                  >
+                    {candidate.showRejected
+                      ? "Hide the rejected draft"
+                      : "Review the rejected draft anyway"}
+                  </button>
+                </div>
+              )}
+
+              <div className="redline-head">
+                <h3>Edits</h3>
+                <span className="help">
+                  {edits.length === 0
+                    ? "No edits."
+                    : `${edits.length} ${edits.length === 1 ? "edit" : "edits"}, ${keptCount} kept. j and k move between edits.`}
+                </span>
+              </div>
+              {edits.length === 0 && !candidate.showRejected ? (
+                <p className="redline-same">{candidate.snapshot.prompt}</p>
+              ) : (
+                <RedlineView
+                  segments={segments}
+                  reverted={candidate.reverted}
+                  locked={candidate.hand !== null}
+                  onToggle={toggleEdit}
+                />
+              )}
+
+              <div className="choice">
+                <div className="pane-heading">
+                  <label htmlFor="final">Final prompt</label>
+                  <span className="help">
+                    {candidate.hand !== null ? "Edited by hand" : "Built from the edits you kept"}
+                  </span>
+                </div>
                 <textarea
-                  id="candidate"
+                  id="final"
+                  className="prompt-text"
+                  rows={10}
                   maxLength={20000}
-                  value={candidate.text}
+                  value={finalText}
                   onChange={(e) => {
                     setTestOpen(false);
-                    setCandidate({ ...candidate, text: e.target.value });
+                    setCandidate({ ...candidate, hand: e.target.value });
                   }}
                 />
+                {problems.length > 0 && (
+                  <div className="problems" role="alert">
+                    <p>
+                      <strong>This text no longer matches what you wrote.</strong>
+                    </p>
+                    <ul>
+                      {problems.map((problem) => (
+                        <li key={problem}>{problem}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 <div className="action-row">
-                  <button onClick={() => copy(candidate.text)}>
-                    Copy candidate
+                  <button type="button" className="primary" onClick={() => copy(finalText)}>
+                    Copy final prompt
                   </button>
                   <button
-                    disabled={!candidate.text.trim()}
+                    type="button"
+                    disabled={!finalText.trim()}
                     onClick={() => {
                       changeDraft(
                         {
                           ...draft,
-                          prompt: candidate.text,
+                          prompt: finalText,
                           kind: candidate.snapshot.kind,
                           mode: candidate.snapshot.mode,
                           engineTarget: candidate.snapshot.engineTarget,
                         },
                         true,
                       );
-                      setNotice(
-                        "Candidate is now the draft. Undo replacement is available.",
-                      );
+                      setNotice("The final prompt is now the draft. Undo replacement is available.");
                     }}
                   >
                     Use as next draft
                   </button>
-                  <button aria-pressed={diff} onClick={() => setDiff(!diff)}>
-                    Word diff
-                  </button>
+                  {candidate.hand !== null && (
+                    <button type="button" onClick={() => setCandidate({ ...candidate, hand: null })}>
+                      Reset to the kept edits
+                    </button>
+                  )}
                   <button
+                    type="button"
                     disabled={
                       candidate.snapshot.kind === "image" ||
                       candidate.snapshot.kind === "video" ||
-                      !candidate.text.trim()
+                      !finalText.trim()
                     }
                     onClick={() => {
                       setTestDraft(false);
                       setTestOpen(true);
                     }}
                   >
-                    Compare text outputs
+                    Compare outputs
                   </button>
                 </div>
-                <p className="help">
-                  {stale
-                    ? "Draft, model, profile or candidate changed. Previous verification is stale. Diff remains bound to the saved original below."
-                    : candidate.result.qualityGate.reason}
-                </p>
-                <details>
-                  <summary>Frozen original and configuration</summary>
-                  <p className="help">
-                    {candidate.snapshot.kind} · {candidate.snapshot.mode} ·{" "}
-                    {candidate.snapshot.profileVersion} ·{" "}
-                    {candidate.snapshot.model}
-                  </p>
-                  <pre data-testid="frozen-original">
-                    {candidate.snapshot.prompt}
-                  </pre>
-                </details>
-              </>
-            ) : (
-              <div className="result-empty">
-                <h2>Review before you use</h2>
-                <p>
-                  A rewrite appears here after you run it. Missing facts become
-                  separate questions, never invented task context.
-                </p>
-                {loading && (
-                  <p role="status">
-                    Waiting for the provider. You can edit or clear the draft to
-                    cancel.
-                  </p>
-                )}
               </div>
-            )}
-          </section>
-        </div>
-        <p className="feedback" aria-live="polite">
-          {error || settingsError || notice}
-        </p>
-        {visual && (
-          <details className="profile-details">
-            <summary>Profile compatibility and sources</summary>
-            <p>
-              {PROFILES[draft.engineTarget].status}. Version:{" "}
-              {PROFILES[draft.engineTarget].version}. Separate negative input:{" "}
-              {PROFILES[draft.engineTarget].negative
-                ? "supported for this version where the host exposes it"
-                : "not supported or not verified"}
-              .
-            </p>
-            <p>{PROFILES[draft.engineTarget].guidance}</p>
-            <p>
-              Text review only. No image/video generation integration is
-              provided; paired text execution is disabled for visual prompts.
-            </p>
-            {PROFILES[draft.engineTarget].sources.map((url) => (
-              <p key={url}>
-                <a href={url} target="_blank" rel="noreferrer">
-                  {url}
-                </a>
-              </p>
-            ))}
-          </details>
-        )}
-        <DiagnosticsPanel
-          diagnostics={diagnostics}
-          loading={diagnosing}
-          onRefresh={diagnose}
-          onQuestion={(value) => {
-            setQuestion(value);
-            setAnswer("");
-          }}
-        />
-        {question && (
-          <section className="question-answer">
-            <label htmlFor="context-answer">{question}</label>
-            <textarea
-              id="context-answer"
-              value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
-              maxLength={2000}
-            />
-            <button
-              disabled={
-                !answer.trim() ||
-                draft.prompt.length + answer.length + 12 > 20000
-              }
-              onClick={() => {
-                changeDraft(
-                  {
-                    ...draft,
-                    prompt: `${draft.prompt}\n\nContext: ${answer.trim()}`,
-                  },
-                  true,
-                );
-                textarea.current?.focus();
-              }}
-            >
-              Add my context to draft
-            </button>
-          </section>
-        )}
-        {candidate && (
-          <section className="result-notes">
-            {diff && (
-              <DiffViewer
-                original={candidate.snapshot.prompt}
-                optimized={candidate.text}
-              />
-            )}
-            <h2>Rewrite notes</h2>
-            <p>{candidate.result.summary}</p>
-            {(["changes", "assumptions", "questions", "warnings"] as const).map(
-              (key) =>
-                candidate.result[key].length ? (
-                  <div key={key}>
-                    <h3>{key}</h3>
-                    <ul>
-                      {candidate.result[key].map((value, index) => (
-                        <li key={index}>{value}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null,
-            )}
-            {candidate.result.negativePrompt && (
-              <div>
-                <h3>
-                  Separate negative prompt for{" "}
-                  {PROFILES[candidate.snapshot.engineTarget].label}
-                </h3>
-                <pre>{candidate.result.negativePrompt}</pre>
-                <button
-                  onClick={() => copy(candidate.result.negativePrompt || "")}
-                >
-                  Copy negative prompt
-                </button>
-              </div>
-            )}
-          </section>
-        )}
-        {candidate && (
-          <details className="result-notes">
-            <summary>
-              Preservation and provider record
-              {stale ? " (historical or stale)" : ""}
-            </summary>
-            <p>
-              {candidate.result.qualityGate.source}:{" "}
-              {candidate.result.qualityGate.state}.{" "}
-              {candidate.result.qualityGate.reason}
-            </p>
-            {candidate.result.qualityGate.intentPreserved !== undefined && (
-              <p className="help">
-                Evaluator intent signal:{" "}
-                {candidate.result.qualityGate.intentPreserved}; bloat signal:{" "}
-                {candidate.result.qualityGate.overEngineered}. Model-based
-                signals, not guarantees.
-              </p>
-            )}
-            {candidate.result.diagnostics && (
-              <p className="help">
-                Original diagnostic source:{" "}
-                {candidate.result.diagnostics.source === "local"
-                  ? "App-server heuristics, no AI-provider transmission"
-                  : candidate.result.diagnostics.source}
-                ; clarity rubric: {candidate.result.diagnostics.clarityScore}/3.
-                This record is separate from current draft diagnostics.
-              </p>
-            )}
-            {candidate.result.completion && (
-              <p className="help">
-                Returned model: {candidate.result.completion.model}; elapsed:{" "}
-                {candidate.result.completion.elapsedMs} ms.{" "}
-                {candidate.result.completion.usage
-                  ? `Returned usage: ${candidate.result.completion.usage.prompt_tokens} input / ${candidate.result.completion.usage.completion_tokens} output / ${candidate.result.completion.usage.total_tokens} total tokens.`
-                  : "Usage not returned."}
-              </p>
-            )}
-          </details>
-        )}
+
+              <ResultNotes result={candidate.result} snapshot={candidate.snapshot} onCopy={copy} />
+            </>
+          )}
+        </section>
       </main>
-      <footer className="workbench-footer">
-        NODAYSIDLE · Preservation first. Review candidates in your target
-        workflow.
+
+      <footer className="foot">
+        <span>NODAYSIDLE</span>
+        <span>Your prompt goes to the provider you chose, through this app&rsquo;s server. Keys and history stay in this browser.</span>
       </footer>
-      <SettingsPanel
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-      />
+
+      <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <HistoryDrawer
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}
@@ -844,7 +916,7 @@ export function PromptWorkspace() {
         open={testOpen}
         onClose={() => setTestOpen(false)}
         snapshot={testDraft ? snapshot : candidate?.snapshot || snapshot}
-        candidate={testDraft ? undefined : candidate?.text}
+        candidate={testDraft ? undefined : finalText}
       />
     </>
   );

@@ -9,10 +9,10 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit --incremental false",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "eval": "node evals/run-eval.ts"
   },
   "dependencies": {
-    "@typesafe-ai/sdk": "^0.6.0",
     "clsx": "^2.1.1",
     "diff": "^9.0.0",
     "lucide-react": "^1.50.0",
@@ -27,7 +27,7 @@
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",
     "@types/diff": "^7.0.2",
-    "@types/node": "^20",
+    "@types/node": "^26.6.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6.1.2",
@@ -36,6 +36,6 @@
     "jsdom": "^30.1.2",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.5"
   }
 }

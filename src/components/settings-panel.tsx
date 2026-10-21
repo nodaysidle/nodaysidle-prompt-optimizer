@@ -6,7 +6,6 @@ import {
   DEFAULT_SETTINGS,
   MODELS,
   type AppSettings,
-  type DiagnosticSource,
 } from "@/lib/types";
 import { MODEL_SOURCE } from "@/lib/profiles";
 import { Dialog } from "./dialog";
@@ -61,7 +60,7 @@ export function SettingsContent({ className }: { className?: string }) {
       );
     }
   }
-  async function test(provider: "deepseek" | "openrouter" | "typesafe") {
+  async function test(provider: "deepseek" | "openrouter") {
     controller.current?.abort();
     const current = new AbortController();
     controller.current = current;
@@ -104,9 +103,9 @@ export function SettingsContent({ className }: { className?: string }) {
     }
   }
   function field(
-    key: "deepseekApiKey" | "openrouterApiKey" | "typesafeApiKey",
+    key: "deepseekApiKey" | "openrouterApiKey",
     label: string,
-    provider: "deepseek" | "openrouter" | "typesafe",
+    provider: "deepseek" | "openrouter",
   ) {
     const access = draft[key]
       ? "BYOK configured (not yet tested)"
@@ -231,40 +230,14 @@ export function SettingsContent({ className }: { className?: string }) {
       </section>
       <details>
         <summary>Advanced diagnostics and privacy</summary>
-        <label htmlFor="source">
-          Diagnostic provider (explicit data-sharing choice)
-        </label>
-        <select
-          id="source"
-          value={draft.diagnosticSource}
-          onChange={(e) =>
-            update("diagnosticSource", e.target.value as DiagnosticSource)
-          }
-        >
-          <option value="local">
-            App-server heuristics, no AI-provider transmission
-          </option>
-          <option value="openrouter">OpenRouter Decision-1</option>
-          <option value="typesafe">TypeSafe System One</option>
-        </select>
         {field("openrouterApiKey", "OpenRouter API key", "openrouter")}
-        {field("typesafeApiKey", "TypeSafe API key", "typesafe")}
-        <label className="check-row">
-          <input
-            type="checkbox"
-            checked={draft.allowLocalFallback}
-            onChange={(e) => update("allowLocalFallback", e.target.checked)}
-          />
-          Allow app-server heuristic fallback if selected AI-provider
-          diagnostics fail (no other AI provider)
-        </label>
         <label className="check-row">
           <input
             type="checkbox"
             checked={draft.autoDiagnose}
             onChange={(e) => update("autoDiagnose", e.target.checked)}
           />
-          Automatically diagnose drafts using my selected source
+          Read my draft automatically as I type
         </label>
       </details>
       <label className="check-row">

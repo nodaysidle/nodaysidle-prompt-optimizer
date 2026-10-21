@@ -1,11 +1,11 @@
 import {
   DEFAULT_SETTINGS,
+  normalizeEngineTarget,
   type AppSettings,
   type PromptHistoryItem,
 } from "./types";
 import { migrateModel, PROFILES } from "./profiles";
 import {
-  enumValue,
   numberValue,
   record,
   text,
@@ -16,11 +16,7 @@ const SETTINGS_KEY = "prompt-optimizer-settings-v3";
 const LEGACY_SETTINGS = "prompt-optimizer-settings-v2";
 const HISTORY_KEY = "prompt-optimizer-history-v2";
 const LEGACY_HISTORY = "prompt-optimizer-history-v1";
-const PROVIDER_KEY_FIELDS = [
-  "deepseekApiKey",
-  "openrouterApiKey",
-  "typesafeApiKey",
-] as const;
+const PROVIDER_KEY_FIELDS = ["deepseekApiKey", "openrouterApiKey"] as const;
 export interface LegacySettingsInfo {
   detected: boolean;
   importable: boolean;
@@ -128,22 +124,12 @@ export function loadSettings(): AppSettings {
       ...DEFAULT_SETTINGS,
       deepseekModel: migrateModel(value.deepseekModel),
       autoDiagnose: value.autoDiagnose !== false,
-      diagnosticSource: enumValue(
-        value.diagnosticSource,
-        ["local", "openrouter", "typesafe"] as const,
-        "local",
-        "source",
-      ),
-      allowLocalFallback: value.allowLocalFallback === true,
       rememberKeys,
       deepseekApiKey: rememberKeys
         ? text(value.deepseekApiKey, "Key", false, 512)
         : "",
       openrouterApiKey: rememberKeys
         ? text(value.openrouterApiKey, "Key", false, 512)
-        : "",
-      typesafeApiKey: rememberKeys
-        ? text(value.typesafeApiKey, "Key", false, 512)
         : "",
     };
   } catch {
@@ -157,7 +143,6 @@ export function saveSettings(settings: AppSettings) {
     appAccessToken: _token,
     deepseekApiKey,
     openrouterApiKey,
-    typesafeApiKey,
     ...safe
   } = settings;
   void _token;
@@ -166,7 +151,7 @@ export function saveSettings(settings: AppSettings) {
     JSON.stringify({
       ...safe,
       ...(settings.rememberKeys
-        ? { deepseekApiKey, openrouterApiKey, typesafeApiKey }
+        ? { deepseekApiKey, openrouterApiKey }
         : {}),
     }),
   );
@@ -185,7 +170,8 @@ export function migrateHistory(value: unknown): PromptHistoryItem[] {
         prompt: original,
         kind: item.kind,
         mode: item.mode,
-        engineTarget: item.engineTarget,
+        // Items saved with a retired target (midjourney, flux, ...) keep their history as general.
+        engineTarget: normalizeEngineTarget(item.engineTarget),
         model: migrateModel(item.model),
       });
       const optimized = text(item.optimized, "Candidate");
@@ -200,7 +186,7 @@ export function migrateHistory(value: unknown): PromptHistoryItem[] {
           : [];
       return [
         {
-          schemaVersion: 2,
+          schemaVersion: 3,
           id: text(item.id, "History ID", true, 200),
           createdAt:
             typeof item.createdAt === "number" &&
@@ -222,13 +208,17 @@ export function migrateHistory(value: unknown): PromptHistoryItem[] {
           isFavorite: item.isFavorite === true,
           changes: arrays("changes"),
           assumptions: arrays("assumptions"),
-          questions: arrays("questions"),
+          unresolvedQuestions: arrays("unresolvedQuestions").length
+            ? arrays("unresolvedQuestions")
+            : arrays("questions"),
           warnings: arrays("warnings"),
           ...(typeof item.negativePrompt === "string" &&
           PROFILES[domain.engineTarget].negative
             ? { negativePrompt: item.negativePrompt.slice(0, 2000) }
             : {}),
-          qualityGate: historicalQuality(item.qualityGate),
+          ...(historicalQuality(item.qualityGate)
+            ? { qualityGate: historicalQuality(item.qualityGate) }
+            : {}),
           ...(item.diagnostics
             ? {
                 diagnostics: historicalDiagnostics(
@@ -248,53 +238,25 @@ export function migrateHistory(value: unknown): PromptHistoryItem[] {
   });
 }
 function historicalQuality(value: unknown): PromptHistoryItem["qualityGate"] {
-  const fallback: PromptHistoryItem["qualityGate"] = {
-    state: "unavailable",
-    passed: false,
-    source: "local",
-    reason: "Legacy history has no verification record.",
-  };
-  if (!value) return fallback;
+  if (!value) return undefined;
   try {
     const gate = record(value);
-    const state = enumValue(
-      gate.state,
-      ["passed", "needsReview", "unavailable"] as const,
-      "unavailable",
-      "Gate state",
-    );
-    const source = enumValue(
-      gate.source,
-      ["local", "openrouter", "typesafe"] as const,
-      "local",
-      "Gate source",
-    );
-    const intentPreserved =
-      gate.intentPreserved === undefined
-        ? undefined
-        : numberValue(gate.intentPreserved, 0, 1, "Intent preservation");
-    const overEngineered =
-      gate.overEngineered === undefined
-        ? undefined
-        : numberValue(gate.overEngineered, 0, 1, "Bloat");
-    const passed =
-      state === "passed" &&
-      intentPreserved !== undefined &&
-      overEngineered !== undefined &&
-      intentPreserved >= 0.7 &&
-      overEngineered <= 0.6;
+    const intentPreserved = numberValue(gate.intentPreserved, 0, 1, "Intent preservation");
+    const overEngineered = numberValue(gate.overEngineered, 0, 1, "Bloat");
     return {
-      state: state === "passed" && !passed ? "unavailable" : state,
-      passed,
-      source,
       intentPreserved,
       overEngineered,
-      reason:
-        text(gate.reason, "Gate reason", false, 2000) ||
-        "Historical evaluation. Re-evaluate before use.",
+      ...(gate.improvement !== undefined
+        ? { improvement: numberValue(gate.improvement, 0, 1, "Improvement") }
+        : {}),
+      // Recomputed from the scores rather than trusted from storage.
+      passed: intentPreserved >= 0.7 && overEngineered <= 0.4,
+      ...(typeof gate.judge === "string"
+        ? { judge: text(gate.judge, "Judge", false, 200) }
+        : {}),
     };
   } catch {
-    return fallback;
+    return undefined;
   }
 }
 function historicalDiagnostics(
@@ -312,12 +274,6 @@ function historicalDiagnostics(
             .slice(0, 20)
         : [];
     return {
-      source: enumValue(
-        data.source,
-        ["local", "openrouter", "typesafe"] as const,
-        "local",
-        "Source",
-      ),
       clarityScore: numberValue(data.clarityScore, 0, 3, "Clarity"),
       clarityLabel: text(data.clarityLabel, "Label", true, 100),
       isAmbiguous: numberValue(data.isAmbiguous, 0, 1, "Ambiguity"),
@@ -326,20 +282,12 @@ function historicalDiagnostics(
       injectionRisk: numberValue(data.injectionRisk, 0, 1, "Injection"),
       issues: list(data.issues),
       strengths: list(data.strengths),
-      findings: Array.isArray(data.findings)
-        ? data.findings.slice(0, 3).map((value) => {
-            const finding = record(value);
-            return {
-              title: text(finding.title, "Finding", true, 200),
-              why: text(finding.why, "Reason", true, 2000),
-              question: text(finding.question, "Question", true, 2000),
-            };
-          })
-        : [],
-      suggestedKind: kind,
-      ...(typeof data.fallback === "string"
-        ? { fallback: text(data.fallback, "Fallback", false, 2000) }
+      unresolvedQuestions: list(data.unresolvedQuestions),
+      ...(typeof data.engine === "string"
+        ? { engine: text(data.engine, "Engine", false, 200) }
         : {}),
+      ...(data.heuristic === true ? { heuristic: true } : {}),
+      suggestedKind: kind,
       ...(data.lacksTemporalAction !== undefined
         ? {
             lacksTemporalAction: numberValue(
@@ -432,7 +380,7 @@ export function saveHistoryItem(
     id: crypto.randomUUID(),
     createdAt: Date.now(),
     isFavorite: false,
-    schemaVersion: 2,
+    schemaVersion: 3,
   };
   writeHistory([next, ...loadHistory()]);
   return next;

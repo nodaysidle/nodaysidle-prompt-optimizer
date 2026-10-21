@@ -18,7 +18,7 @@ export function addReferencePhotoInstruction(prompt: string): string {
 }
 export function composePresets(
   prompt: string,
-  target: EngineTarget,
+  _target: EngineTarget,
   ratio: string,
   lens: string,
 ) {
@@ -33,11 +33,7 @@ export function composePresets(
   return [
     clean,
     lens ? `Shot on ${lens} lens` : "",
-    ratio
-      ? target === "midjourney"
-        ? `--ar ${ratio}`
-        : `Aspect ratio ${ratio}`
-      : "",
+    ratio ? `Aspect ratio ${ratio}` : "",
   ]
     .filter(Boolean)
     .join("\n");

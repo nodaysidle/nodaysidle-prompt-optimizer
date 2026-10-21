@@ -1,9 +1,8 @@
 import {
   ENGINE_TARGETS,
-  MODELS,
   MODES,
   PROMPT_KINDS,
-  type DiagnosticSource,
+  migrateModel,
 } from "./types";
 import { PROFILES } from "./profiles";
 
@@ -91,25 +90,7 @@ export function validateDomain(value: unknown) {
   );
   if (!PROFILES[engineTarget].kinds.includes(kind))
     throw new AppError("Target profile is incompatible with this prompt kind.");
-  const model = enumValue(body.model, MODELS, "deepseek-flash", "model");
-  const diagnosticSource: DiagnosticSource = enumValue(
-    body.diagnosticSource,
-    ["local", "openrouter", "typesafe"] as const,
-    "local",
-    "diagnostic source",
-  );
-  return {
-    body,
-    prompt,
-    kind,
-    mode,
-    engineTarget,
-    model,
-    diagnosticSource,
-    allowLocalFallback: booleanValue(
-      body.allowLocalFallback,
-      false,
-      "Local fallback consent",
-    ),
-  };
+  // Older clients saved retired ids (deepseek-flash, deepseek-chat); accept and upgrade them.
+  const model = migrateModel(body.model);
+  return { body, prompt, kind, mode, engineTarget, model };
 }

@@ -22,7 +22,6 @@ beforeEach(() => {
         sharedAccess: false,
         deepseek: false,
         openrouter: false,
-        typesafe: false,
       }),
     ),
   );
@@ -46,7 +45,6 @@ describe("explicit legacy credential choices", () => {
     const original = JSON.stringify({
       deepseekApiKey: "fixture-saved-key",
       appAccessToken: "fixture-not-imported",
-      diagnosticSource: "openrouter",
       rememberKeys: true,
       deepseekModel: "deepseek-reasoner",
     });
@@ -77,13 +75,6 @@ describe("explicit legacy credential choices", () => {
     expect(
       (
         screen.getByLabelText(
-          "Diagnostic provider (explicit data-sharing choice)",
-        ) as HTMLSelectElement
-      ).value,
-    ).toBe("local");
-    expect(
-      (
-        screen.getByLabelText(
           "Remember provider keys in this browser (plaintext)",
         ) as HTMLInputElement
       ).checked,
@@ -92,7 +83,7 @@ describe("explicit legacy credential choices", () => {
     expect(
       (
         screen.getByLabelText(
-          "Automatically diagnose drafts using my selected source",
+          "Read my draft automatically as I type",
         ) as HTMLInputElement
       ).checked,
     ).toBe(false);

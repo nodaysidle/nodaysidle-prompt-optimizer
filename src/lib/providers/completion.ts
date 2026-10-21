@@ -79,8 +79,25 @@ export async function boundedJson(
     parent?.removeEventListener("abort", abort);
   }
 }
+const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+
+/** Ids per route. Anything outside this table never reaches a provider. */
+export const MODEL_IDS: Record<Model, { openrouter: string; direct: string }> = {
+  "deepseek-v4.1-flash": {
+    openrouter: "deepseek/deepseek-v4.1-flash",
+    direct: "deepseek-flash",
+  },
+  "deepseek-v4-pro": {
+    openrouter: "deepseek/deepseek-v4-pro",
+    direct: "deepseek-v4-pro",
+  },
+};
+
 export interface CompletionParams {
+  /** A DeepSeek key, or an OpenRouter key (sk-or-...) when that is all the caller has. */
   apiKey: string;
+  openrouterApiKey?: string;
   model: Model;
   messages: { role: "system" | "user"; content: string }[];
   temperature?: number;
@@ -88,23 +105,73 @@ export interface CompletionParams {
   jsonMode?: boolean;
   signal?: AbortSignal;
 }
+
+function splitKeys(params: CompletionParams) {
+  const apiKey = params.apiKey.trim();
+  const viaOpenrouter = apiKey.startsWith("sk-or-");
+  return {
+    openrouter: params.openrouterApiKey?.trim() || (viaOpenrouter ? apiKey : ""),
+    direct: viaOpenrouter ? "" : apiKey,
+  };
+}
+
+function isCancelled(error: unknown, signal?: AbortSignal) {
+  return Boolean(signal?.aborted) || (error instanceof ProviderError && error.status === 499);
+}
+
+async function request(
+  route: "openrouter" | "direct",
+  key: string,
+  params: CompletionParams,
+  timeout: number,
+) {
+  const ids = MODEL_IDS[params.model];
+  const body = {
+    model: route === "openrouter" ? ids.openrouter : ids.direct,
+    messages: params.messages,
+    temperature: params.temperature ?? 0.3,
+    max_tokens: params.maxTokens ?? 4096,
+    ...(route === "direct" ? { thinking: { type: "disabled" } } : {}),
+    // The fastest healthy upstream, not the cheapest; the rewrite sits on the user's critical path.
+    ...(route === "openrouter"
+      ? { provider: { sort: "latency", allow_fallbacks: true } }
+      : {}),
+    ...(params.jsonMode ? { response_format: { type: "json_object" } } : {}),
+  };
+  return boundedJson(
+    route === "openrouter" ? OPENROUTER_URL : DEEPSEEK_URL,
+    key,
+    body,
+    params.signal,
+    timeout,
+  );
+}
+
 export async function complete(
   params: CompletionParams,
 ): Promise<CompletionResult> {
   const start = performance.now();
-  const data = await boundedJson(
-    "https://api.deepseek.com/chat/completions",
-    params.apiKey,
-    {
-      model: params.model,
-      messages: params.messages,
-      temperature: params.temperature ?? 0.3,
-      max_tokens: params.maxTokens ?? 4096,
-      thinking: { type: "disabled" },
-      ...(params.jsonMode ? { response_format: { type: "json_object" } } : {}),
-    },
-    params.signal,
-  );
+  const keys = splitKeys(params);
+  if (!keys.openrouter && !keys.direct)
+    throw new ProviderError("A provider key is required.", 401);
+  // Long rewrites need more time than a fixed deadline, but never an unbounded one.
+  const timeout = Math.min(90000, 15000 + (params.maxTokens ?? 4096) * 12);
+
+  let data: unknown;
+  if (keys.openrouter) {
+    try {
+      data = await request("openrouter", keys.openrouter, params, timeout);
+    } catch (error) {
+      if (!keys.direct || isCancelled(error, params.signal)) throw error;
+      data = await request("direct", keys.direct, params, timeout);
+    }
+  } else {
+    data = await request("direct", keys.direct, params, timeout);
+  }
+  return parseCompletion(data, start);
+}
+
+function parseCompletion(data: unknown, start: number): CompletionResult {
   try {
     const result = record(data);
     if (!Array.isArray(result.choices) || !result.choices.length)
@@ -124,24 +191,9 @@ export async function complete(
     if (result.usage !== undefined) {
       const raw = record(result.usage);
       usage = {
-        prompt_tokens: numberValue(
-          raw.prompt_tokens,
-          0,
-          10000000,
-          "Prompt tokens",
-        ),
-        completion_tokens: numberValue(
-          raw.completion_tokens,
-          0,
-          10000000,
-          "Completion tokens",
-        ),
-        total_tokens: numberValue(
-          raw.total_tokens,
-          0,
-          20000000,
-          "Total tokens",
-        ),
+        prompt_tokens: numberValue(raw.prompt_tokens, 0, 10000000, "Prompt tokens"),
+        completion_tokens: numberValue(raw.completion_tokens, 0, 10000000, "Completion tokens"),
+        total_tokens: numberValue(raw.total_tokens, 0, 20000000, "Total tokens"),
       };
       if (Object.values(usage).some((value) => !Number.isInteger(value)))
         throw new Error();

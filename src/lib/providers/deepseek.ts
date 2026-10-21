@@ -3,14 +3,21 @@ import type { Model, PromptKind } from "../types";
 
 export async function chatDeepSeek(params: {
   apiKey: string;
+  openrouterApiKey?: string;
   model: Model;
   system: string;
   user: string;
   jsonMode?: boolean;
+  maxTokens?: number;
   signal?: AbortSignal;
 }) {
   return complete({
-    ...params,
+    apiKey: params.apiKey,
+    openrouterApiKey: params.openrouterApiKey,
+    model: params.model,
+    jsonMode: params.jsonMode,
+    maxTokens: params.maxTokens,
+    signal: params.signal,
     messages: [
       { role: "system", content: params.system },
       { role: "user", content: params.user },
@@ -39,6 +46,7 @@ export function testMessages(prompt: string, kind: PromptKind, testInput = "") {
 }
 export async function runPromptTest(params: {
   apiKey: string;
+  openrouterApiKey?: string;
   model: Model;
   prompt: string;
   kind: PromptKind;
@@ -48,7 +56,12 @@ export async function runPromptTest(params: {
   signal?: AbortSignal;
 }) {
   return complete({
-    ...params,
+    apiKey: params.apiKey,
+    openrouterApiKey: params.openrouterApiKey,
+    model: params.model,
+    temperature: params.temperature,
+    maxTokens: params.maxTokens,
+    signal: params.signal,
     messages: testMessages(params.prompt, params.kind, params.testInput),
   });
 }

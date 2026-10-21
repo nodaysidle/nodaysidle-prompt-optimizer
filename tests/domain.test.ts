@@ -2,10 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import { validateDomain } from "@/lib/validation";
 import {
   buildOptimizerMessages,
+  findFabricatedPlaceholders,
   parseOptimizationResponse,
   preservationWarnings,
 } from "@/lib/optimizer-prompt";
-import { runHeuristicDiagnostics, validateQualityAnswers } from "@/lib/jev";
+import { mapDiagnosticAnswers, runHeuristicDiagnostics } from "@/lib/decisions";
 import {
   addReferencePhotoInstruction,
   composePresets,
@@ -34,59 +35,68 @@ describe("runtime domain", () => {
     { prompt: "valid", kind: "bogus" },
     { prompt: "valid", mode: "bogus" },
     { prompt: "valid", engineTarget: "flux", kind: "video" },
-    { prompt: "valid", model: "deepseek-chat" },
-    { prompt: "valid", allowLocalFallback: "yes" },
+    { prompt: "valid", engineTarget: "veo", kind: "image" },
+    { prompt: "valid", engineTarget: "nano-banana", kind: "video" },
   ])("rejects invalid input %j", (body) =>
     expect(() => validateDomain(body)).toThrow(),
   );
-  it("defaults to minimal/local/current flash", () =>
-    expect(
-      validateDomain({ prompt: "Translate hello into French." }),
-    ).toMatchObject({
+  it("defaults to minimal/universal/current flash", () => {
+    const domain = validateDomain({ prompt: "Translate hello into French." });
+    expect(domain).toMatchObject({
+      kind: "user",
       mode: "minimal",
-      diagnosticSource: "local",
-      model: "deepseek-flash",
-    }));
+      engineTarget: "universal",
+      model: "deepseek-v4.1-flash",
+    });
+    expect(domain).not.toHaveProperty("diagnosticSource");
+    expect(domain).not.toHaveProperty("allowLocalFallback");
+  });
+  it("upgrades retired model ids instead of rejecting or forwarding them", () => {
+    for (const model of ["deepseek-chat", "deepseek-flash", "unknown", 4])
+      expect(validateDomain({ prompt: "valid", model }).model).toBe(
+        "deepseek-v4.1-flash",
+      );
+    for (const model of ["deepseek-reasoner", "deepseek/deepseek-v4-pro"])
+      expect(validateDomain({ prompt: "valid", model }).model).toBe(
+        "deepseek-v4-pro",
+      );
+  });
 });
 describe("preservation and response boundaries", () => {
   it.each([
     "raw answer",
-    '{"optimized":"candidate"}',
-    JSON.stringify({
-      optimized: "",
-      summary: "ok",
-      changes: [],
-      assumptions: [],
-      questions: [],
-    }),
-    JSON.stringify({
-      optimized: "ok",
-      summary: 4,
-      changes: [],
-      assumptions: [],
-      questions: [],
-    }),
-  ])("never accepts raw or malformed output", (raw) =>
-    expect(() => parseOptimizationResponse(raw)).toThrow(),
+    "Here is a better prompt: Translate hello into French.",
+    '{"summary":"no candidate"}',
+    JSON.stringify({ optimized: "", summary: "ok", changes: [] }),
+    JSON.stringify({ optimized: 4, summary: "ok", changes: [] }),
+  ])("never accepts raw or malformed output as a candidate", (raw) =>
+    expect(() => parseOptimizationResponse(raw)).toThrow("required format"),
   );
-  it("accepts complete schema and rejects unsupported negatives", () => {
+  it("accepts a complete response and drops unsupported negatives", () => {
     const raw = JSON.stringify({
       optimized: "Use [literal] exactly.",
       summary: "Kept literal.",
       changes: [],
       assumptions: [],
-      questions: [],
+      questions: ["Which audience?"],
     });
-    expect(parseOptimizationResponse(raw).optimized).toContain("[literal]");
-    expect(() =>
-      parseOptimizationResponse(
-        raw.replace('"changes"', '"negativePrompt":"bad","changes"'),
-        "flux",
-      ),
-    ).toThrow();
+    const parsed = parseOptimizationResponse(raw);
+    expect(parsed.optimized).toContain("[literal]");
+    expect(parsed.questions).toEqual(["Which audience?"]);
+    const withNegative = raw.replace(
+      '"changes"',
+      '"negativePrompt":"bad","changes"',
+    );
+    expect(
+      parseOptimizationResponse(withNegative, "video", "A bird", "veo")
+        .negativePrompt,
+    ).toBeUndefined();
+    expect(
+      parseOptimizationResponse(withNegative, "user").negativePrompt,
+    ).toBeUndefined();
   });
   it.each(["minimal", "structured", "creative"] as const)(
-    "makes %s preservation explicit without imposed timing/tags",
+    "makes %s preservation explicit without imposed timing",
     (mode) => {
       const messages = buildOptimizerMessages(
         "Static camera, 3 seconds, [literal] bird.",
@@ -95,9 +105,12 @@ describe("preservation and response boundaries", () => {
         "veo",
         mode,
       );
-      expect(messages.system).toContain("static-camera");
-      expect(messages.system).toContain("Never introduce bracket variables");
+      expect(messages.system).toContain(`MODE ${mode}`);
+      expect(messages.system).toContain("NO FABRICATED FACTS");
+      expect(messages.system).toContain("A static camera is valid");
+      expect(messages.system).toContain("Never impose a duration");
       expect(messages.user).toContain("3 seconds");
+      expect(messages.user).toContain("<ORIGINAL_PROMPT>");
       expect(messages.system).not.toContain("5-8s");
     },
   );
@@ -117,52 +130,79 @@ describe("preservation and response boundaries", () => {
       ),
     ).toEqual([]);
   });
-  it.each([
-    {},
-    { intent_preserved: { noul: 0.9 } },
-    { intent_preserved: { noul: 2 }, over_engineered: { noul: 0.1 } },
-    { intent_preserved: { noul: Number.NaN }, over_engineered: { noul: 0.1 } },
-  ])("missing or invalid checks never pass", (value) =>
-    expect(() => validateQualityAnswers(value, "openrouter")).toThrow(),
-  );
-  it("failed checks explicitly need review", () =>
+  it("flags generated bracket placeholders but not the user's own brackets", () => {
     expect(
-      validateQualityAnswers(
-        { intent_preserved: { noul: 0.2 }, over_engineered: { noul: 0.8 } },
-        "typesafe",
-      ),
-    ).toMatchObject({ state: "needsReview", passed: false }));
+      findFabricatedPlaceholders("Translate hello", "Translate [missing context]"),
+    ).toEqual(["[missing context]"]);
+    expect(
+      findFabricatedPlaceholders("Use [literal] exactly", "Use [literal] exactly."),
+    ).toEqual([]);
+  });
+  it("answers outside the valid range never become favorable scores", () => {
+    const result = mapDiagnosticAnswers(
+      {
+        clarity: { score: 99 },
+        is_ambiguous: { noul: -1 },
+        lacks_constraints: { noul: 7 },
+        injection_risk: { noul: Number.NaN },
+      },
+      { kind: "user", engine: "test" },
+    );
+    expect(result.clarityScore).toBe(1);
+    expect(result.isAmbiguous).toBe(0.5);
+    expect(result.lacksConstraints).toBe(0.5);
+    expect(result.strengths).toEqual([]);
+  });
 });
 describe("type-aware rules and profiles", () => {
-  it("short clear task scores well without persona", () =>
-    expect(
-      runHeuristicDiagnostics("Translate hello into French.", "user"),
-    ).toMatchObject({ clarityScore: 3, lacksRole: 0, issues: [] }));
-  it("static camera and still subject are valid", () =>
-    expect(
-      runHeuristicDiagnostics(
-        "A still bird, static camera, 3 seconds.",
-        "video",
-      ),
-    ).toMatchObject({ clarityScore: 3, lacksCameraMovement: 0.1, issues: [] }));
-  it("explicit kind controls rubric", () =>
-    expect(
-      runHeuristicDiagnostics("You are a portrait camera.", "image").issues,
-    ).not.toContain("Define boundaries"));
-  it("does not universalize negative fields", () => {
-    expect(PROFILES.flux.negative).toBe(false);
-    expect(PROFILES.kling.negative).toBe(false);
-    expect(PROFILES.sd.negative).toBe(true);
+  it("rule-based diagnostics are labelled heuristic, never calibrated", () => {
+    const result = runHeuristicDiagnostics("Translate hello into French.", "user");
+    expect(result.heuristic).toBe(true);
+    expect(result.engine).toContain("heuristic");
+  });
+  it("a short user task is never penalised for lacking a persona", () => {
+    const result = runHeuristicDiagnostics("Translate hello into French.", "user");
+    expect(result.issues.join(" ")).not.toMatch(/persona|role/i);
+  });
+  it("persona is only requested for governing system prompts", () => {
+    const long =
+      "Answer questions about our refund policy for customers who write in about orders.";
+    expect(runHeuristicDiagnostics(long, "system").issues.join(" ")).toMatch(
+      /persona/i,
+    );
+    for (const kind of ["user", "image", "video"] as const)
+      expect(runHeuristicDiagnostics(long, kind).issues.join(" ")).not.toMatch(
+        /persona/i,
+      );
+  });
+  it("static camera and still subject are valid", () => {
+    const result = runHeuristicDiagnostics(
+      "A still bird, static camera, 3 seconds.",
+      "video",
+    );
+    expect(result.lacksCameraMovement).toBeLessThan(0.3);
+    expect(result.lacksTemporalAction).toBeLessThan(0.3);
+    expect(result.issues.join(" ")).not.toMatch(/camera|motion/i);
+  });
+  it("explicit kind controls rubric", () => {
+    const image = runHeuristicDiagnostics("You are a portrait camera.", "image");
+    expect(image.lacksCameraMovement).toBeUndefined();
+    expect(image.issues.join(" ")).not.toMatch(/persona|camera behavior/i);
+  });
+  it("only the engines that support a separate negative field offer one", () => {
+    expect(PROFILES.universal.negative).toBe(true);
+    for (const target of ["nano-banana", "gpt-image", "veo", "omni"] as const)
+      expect(PROFILES[target].negative).toBe(false);
   });
   it("replaces ratio/lens without duplicate punctuation", () => {
     const first = composePresets(
       "Bird, aspect ratio 16:9, shot on 35mm lens",
-      "midjourney",
+      "universal",
       "9:16",
       "85mm",
     );
-    const second = composePresets(first, "midjourney", "1:1", "24mm");
-    expect(second).toBe("Bird\nShot on 24mm lens\n--ar 1:1");
+    const second = composePresets(first, "universal", "1:1", "24mm");
+    expect(second).toBe("Bird\nShot on 24mm lens\nAspect ratio 1:1");
     expect(composePresets(second, "universal", "", "")).toBe("Bird");
     expect(composePresets("", "universal", "1:1", "")).toBe("Aspect ratio 1:1");
   });
@@ -171,11 +211,13 @@ describe("type-aware rules and profiles", () => {
     expect(parsePresets(edited)).toEqual({ ratio: "16:9", lens: "35mm" });
     const changedLens = composePresets(
       edited,
-      "midjourney",
+      "universal",
       parsePresets(edited).ratio,
       "85mm",
     );
-    expect(changedLens).toBe("A blue bird\nShot on 85mm lens\n--ar 16:9");
+    expect(changedLens).toBe(
+      "A blue bird\nShot on 85mm lens\nAspect ratio 16:9",
+    );
     expect(
       parsePresets("A bird, aspect ratio 2.39:1, shot on 50mm lens"),
     ).toEqual({ ratio: "2.39:1", lens: "50mm" });
@@ -206,11 +248,13 @@ describe("history and credentials", () => {
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({
       mode: "minimal",
-      model: "deepseek-flash",
-      schemaVersion: 2,
+      engineTarget: "universal",
+      model: "deepseek-v4.1-flash",
+      schemaVersion: 3,
       isFavorite: true,
-      qualityGate: { passed: false },
     });
+    // No judge ran for a legacy item: the gate stays absent, never an invented pass or fail.
+    expect(items[0].qualityGate).toBeUndefined();
   });
   it("protects favorites from rolling eviction", () => {
     const favorite = { id: "favorite", isFavorite: true } as PromptHistoryItem;
@@ -260,8 +304,10 @@ describe("history and credentials", () => {
       invalidKeys: false,
     });
     expect(writes).not.toHaveBeenCalled();
-    expect(migrateModel("deepseek-chat")).toBe("deepseek-flash");
+    expect(migrateModel("deepseek-chat")).toBe("deepseek-v4.1-flash");
+    expect(migrateModel("deepseek-flash")).toBe("deepseek-v4.1-flash");
     expect(migrateModel("deepseek-reasoner")).toBe("deepseek-v4-pro");
+    expect(migrateModel("deepseek/deepseek-v4-pro")).toBe("deepseek-v4-pro");
   });
   it("model alias migration survives repeated loads and an explicit v3 save", () => {
     localStorage.clear();
@@ -285,11 +331,10 @@ describe("history and credentials", () => {
     const original = JSON.stringify({
       deepseekApiKey: " fixture-deepseek ",
       openrouterApiKey: "fixture-openrouter",
-      typesafeApiKey: "fixture-typesafe",
+      typesafeApiKey: "retired-key",
       appAccessToken: "never-import",
       unknownApiKey: "never-import",
       deepseekModel: "deepseek-reasoner",
-      diagnosticSource: "openrouter",
       rememberKeys: true,
     });
     localStorage.setItem("prompt-optimizer-settings-v2", original);
@@ -298,15 +343,14 @@ describe("history and credentials", () => {
     expect(imported).toMatchObject({
       deepseekApiKey: "fixture-deepseek",
       openrouterApiKey: "fixture-openrouter",
-      typesafeApiKey: "fixture-typesafe",
       appAccessToken: "",
       deepseekModel: "deepseek-v4-pro",
-      diagnosticSource: "local",
       rememberKeys: false,
-      allowLocalFallback: false,
       autoDiagnose: false,
     });
     expect(JSON.stringify(imported)).not.toContain("never-import");
+    expect(JSON.stringify(imported)).not.toContain("retired-key");
+    expect(imported).not.toHaveProperty("typesafeApiKey");
     expect(writes).not.toHaveBeenCalled();
     expect(localStorage.getItem("prompt-optimizer-settings-v3")).toBeNull();
     expect(localStorage.getItem("prompt-optimizer-settings-v2")).toBe(original);
@@ -316,13 +360,11 @@ describe("history and credentials", () => {
     const original = JSON.stringify({
       deepseekApiKey: "valid-fixture",
       openrouterApiKey: "x".repeat(513),
-      typesafeApiKey: 42,
     });
     localStorage.setItem("prompt-optimizer-settings-v2", original);
     expect(importLegacySettings()).toMatchObject({
       deepseekApiKey: "valid-fixture",
       openrouterApiKey: "",
-      typesafeApiKey: "",
     });
     expect(inspectLegacySettings()).toMatchObject({
       importable: true,
@@ -337,7 +379,6 @@ describe("history and credentials", () => {
       JSON.stringify({
         deepseekApiKey: "",
         openrouterApiKey: "  ",
-        typesafeApiKey: "",
       }),
     );
     expect(inspectLegacySettings()).toEqual({
@@ -398,34 +439,89 @@ describe("history and credentials", () => {
         original: "A bird",
         optimized: "A still bird",
         summary: "Kept bird",
-        kind: "image",
+        kind: "video",
         mode: "creative",
-        engineTarget: "flux",
+        engineTarget: "veo",
         model: "deepseek-v4-pro",
-        profileVersion: "flux-2-test",
+        profileVersion: "veo-test",
         changes: ["Edit"],
         assumptions: ["Still"],
         questions: ["Color?"],
         warnings: ["Check"],
         qualityGate: {
-          state: "passed",
-          source: "openrouter",
           passed: true,
           intentPreserved: 0.9,
           overEngineered: 0.1,
-          reason: "Checked",
+          judge: "Microsoft-Decision-1",
         },
         deepseekApiKey: "not-allowed",
       },
     ]);
     expect(item).toMatchObject({
       mode: "creative",
-      profileVersion: "flux-2-test",
+      engineTarget: "veo",
+      profileVersion: "veo-test",
       model: "deepseek-v4-pro",
       changes: ["Edit"],
       assumptions: ["Still"],
-      qualityGate: { intentPreserved: 0.9, overEngineered: 0.1 },
+      unresolvedQuestions: ["Color?"],
+      qualityGate: { intentPreserved: 0.9, overEngineered: 0.1, passed: true },
     });
     expect(JSON.stringify(item)).not.toContain("not-allowed");
+  });
+  it("history items saved with a retired engine target normalise to universal instead of being dropped", () => {
+    const items = migrateHistory(
+      ["midjourney", "flux", "sd", "kling", "runway"].map((engineTarget, index) => ({
+        id: `old-${index}`,
+        createdAt: 1,
+        original: "A bird on a wire",
+        optimized: "A bird perched on a wire at dawn",
+        kind: "image",
+        engineTarget,
+      })),
+    );
+    expect(items).toHaveLength(5);
+    for (const item of items) expect(item.engineTarget).toBe("universal");
+  });
+  it("gate verdicts in saved history are recomputed from scores, not trusted", () => {
+    const [item] = migrateHistory([
+      {
+        id: "old",
+        createdAt: 1,
+        original: "A bird",
+        optimized: "A bird in flight",
+        kind: "image",
+        qualityGate: {
+          state: "passed",
+          passed: true,
+          intentPreserved: 0.2,
+          overEngineered: 0.9,
+        },
+      },
+    ]);
+    expect(item.qualityGate).toMatchObject({ passed: false });
+    expect(
+      migrateHistory([
+        {
+          id: "bad",
+          createdAt: 1,
+          original: "A bird",
+          optimized: "A bird in flight",
+          qualityGate: { intentPreserved: 4, overEngineered: 0 },
+        },
+      ])[0].qualityGate,
+    ).toBeUndefined();
+  });
+  it("legacy questions migrate to unresolvedQuestions", () => {
+    const [item] = migrateHistory([
+      {
+        id: "q",
+        createdAt: 1,
+        original: "A bird",
+        optimized: "A bird in flight",
+        questions: ["Which species?"],
+      },
+    ]);
+    expect(item.unresolvedQuestions).toEqual(["Which species?"]);
   });
 });

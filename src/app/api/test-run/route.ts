@@ -1,6 +1,6 @@
 import { runPromptTest } from "@/lib/providers/deepseek";
 import { AppError, numberValue, text, validateDomain } from "@/lib/validation";
-import { resolveKey } from "@/lib/server/access";
+import { resolveChatKeys } from "@/lib/server/access";
 import { readBody, routeError } from "@/lib/server/route";
 export async function POST(req: Request) {
   try {
@@ -30,7 +30,7 @@ export async function POST(req: Request) {
     );
     if (!Number.isInteger(maxTokens))
       throw new AppError("Output tokens must be an integer.");
-    const apiKey = resolveKey(req, "deepseek");
+    const keys = resolveChatKeys(req);
     const config = {
       model: domain.model,
       kind: domain.kind,
@@ -44,7 +44,12 @@ export async function POST(req: Request) {
     req.signal.addEventListener("abort", abort, { once: true });
     if (req.signal.aborted) abort();
     try {
-      const params = { ...config, apiKey, signal: controller.signal };
+      const params = {
+        ...config,
+        apiKey: keys.deepseekApiKey,
+        openrouterApiKey: keys.openrouterApiKey,
+        signal: controller.signal,
+      };
       const [before, after] = await Promise.all([
         runPromptTest({ ...params, prompt: domain.prompt }),
         candidate

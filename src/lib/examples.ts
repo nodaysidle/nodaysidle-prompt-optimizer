@@ -19,7 +19,7 @@ export const PROMPT_EXAMPLES: PromptExample[] = [
   },
   {
     title: "Kling FPV Chase (historical)",
-    engineTarget: "kling",
+    engineTarget: "veo",
     kind: "video",
     description: "High-speed camera path through neon cyber city",
     prompt: `FPV drone descending through misty cyberpunk neon canyon, chasing an agile futuristic hoverbike through narrow wet alleyways with neon reflection puddles, rapid banking turns, sparks flying from wall scrapes, cinematic anamorphic lens.`,

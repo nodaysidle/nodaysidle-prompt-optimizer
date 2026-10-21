@@ -1,5 +1,7 @@
 "use client";
 import type { DiagnosticResult } from "@/lib/types";
+
+/** What the diagnostic model (or the rule-based fallback) said about the current draft. */
 export function DiagnosticsPanel({
   diagnostics,
   loading,
@@ -12,52 +14,39 @@ export function DiagnosticsPanel({
   onQuestion: (question: string) => void;
 }) {
   return (
-    <section className="diagnostics" aria-label="Draft diagnostics">
-      <div className="action-row">
-        <h2>Draft diagnostics</h2>
+    <section className="read" aria-label="Read of your draft">
+      <div className="read-head">
+        <h2>Read of your draft</h2>
         <button type="button" disabled={loading} onClick={onRefresh}>
-          Recheck draft
+          {loading ? "Reading" : "Read again"}
         </button>
       </div>
       <p className="help" aria-live="polite">
         {loading
-          ? "Checking current draft…"
+          ? "Reading your draft."
           : diagnostics
-            ? `${diagnostics.source === "local" ? "App-server heuristics, no AI-provider transmission" : diagnostics.source} · ${diagnostics.clarityLabel}. ${diagnostics.source === "local" ? "Your draft is sent to this app's server. Rule signals, not calibrated probabilities or a quality guarantee." : "Model-based rubric with app-server repair questions, not a downstream quality guarantee."}`
-            : "Enter a draft to see questions worth resolving. Diagnosis sends the draft to this app's server; short, clear prompts are valid."}
+            ? `${diagnostics.clarityLabel}. ${
+                diagnostics.heuristic
+                  ? "Rule-based estimate, no model was consulted."
+                  : `Judged by ${diagnostics.engine ?? "the diagnostic model"}.`
+              }`
+            : "Type a draft and it is read here. Short, clear prompts are valid and may need nothing."}
       </p>
-      {diagnostics?.fallback && (
-        <p className="feedback">{diagnostics.fallback}</p>
+      {diagnostics && diagnostics.issues.length > 0 && (
+        <ul className="read-list">
+          {diagnostics.issues.map((issue) => (
+            <li key={issue}>{issue}</li>
+          ))}
+        </ul>
       )}
-      {diagnostics?.findings.map((finding) => (
-        <div className="finding" key={finding.title}>
-          <h3>{finding.title}</h3>
-          <p>{finding.why}</p>
-          <button onClick={() => onQuestion(finding.question)}>
-            Answer: {finding.question}
+      {diagnostics?.unresolvedQuestions?.map((question) => (
+        <p className="read-question" key={question}>
+          <span>{question}</span>
+          <button type="button" onClick={() => onQuestion(question)}>
+            Answer this
           </button>
-        </div>
-      ))}
-      {diagnostics && diagnostics.injectionRisk > 0.5 && (
-        <p className="feedback">
-          Security warning: possible instruction-override syntax. Review quoted
-          or untrusted text boundaries; this is not a missing-context issue.
         </p>
-      )}
-      {diagnostics && (
-        <details>
-          <summary>Rubric details and strengths</summary>
-          <p>
-            Clarity: {diagnostics.clarityScore}/3. Scores describe this rubric,
-            not execution quality.
-          </p>
-          <ul>
-            {diagnostics.strengths.map((strength) => (
-              <li key={strength}>{strength}</li>
-            ))}
-          </ul>
-        </details>
-      )}
+      ))}
     </section>
   );
 }

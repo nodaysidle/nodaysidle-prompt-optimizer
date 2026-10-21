@@ -153,7 +153,11 @@ async function main() {
     try {
       const res = await fetch(`${base}/api/optimize`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          // Run with --env-file to use your own key; without it the server must hold shared keys.
+          ...(process.env.OPENROUTER_API_KEY ? { "x-openrouter-key": process.env.OPENROUTER_API_KEY } : {}),
+        },
         body: JSON.stringify({ prompt: seed.prompt, kind: seed.kind }),
       });
       const elapsed = Date.now() - startedAt;

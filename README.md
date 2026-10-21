@@ -1,74 +1,89 @@
-# NODAYSIDLE Prompt Workbench
+# NODAYSIDLE Prompt Optimizer
 
-A preservation-first prompt editor for user, system, image and video text. Dark desktop-first layout, existing BrandMark and Geist. Image/video profiles provide text review only, not generation.
+Paste a prompt. Get back edits to your own words, not a replacement you have to trust. Keep the edits you want, revert the rest, copy the final prompt.
 
-## Run locally
+Works on user prompts, system prompts, image prompts (Nano Banana, ChatGPT Images) and video prompts (Veo 3.1, Gemini Omni). Image and video output is text only. Nothing is rendered here.
 
-Requires Node 22 or newer and npm.
+Live: https://nodaysidle-prompt-optimizer.vercel.app
+
+## How a run goes
+
+```text
+your draft
+  -> diagnose   Microsoft Decision-1 via OpenRouter reads it (rule-based if no OpenRouter key)
+  -> rewrite    DeepSeek V4.1 Flash or V4 Pro, one JSON rewrite
+  -> verify     built-in checks (quoted text, numbers, code, length, no placeholders)
+                plus a Decision-1 gate: intent kept, bloat, likely better
+  -> repair     one second pass if verification fails
+  -> result     edits you keep or revert, or your original if the rewrite did not earn its place
+```
+
+The five lamps beside the main button light as the server reports each of those stages. They never advance on a timer. They go out when the result lands.
+
+## What the result tells you
+
+- **Checked**: the judge model found your intent kept and no bloat, and the built-in checks passed.
+- **Needs your review**: something was flagged. It is listed under "Worth a second look".
+- **Original kept**: the rewrite failed verification, or was not clearly better. Your prompt comes back unchanged and you can still read the rejected draft.
+- **Not independently checked**: no judge model was available, so only the built-in checks ran.
+
+Short, clear prompts often come back unchanged. That is a valid result.
+
+The final prompt is built from the edits you keep and stays editable. If your hand edits drop quoted text, numbers or code from your original, or the reference-photo line, a warning says so.
+
+## Keys and privacy
+
+- Bring your own DeepSeek or OpenRouter key in Settings. Keys stay in this browser tab unless you choose to remember them, and then they are stored in plaintext in this browser.
+- Your prompt goes from the browser to this app's server and on to the provider you chose. History and settings stay in your browser.
+- The server's own keys are used only when the caller sends a valid `x-app-access-token` that matches `APP_ACCESS_TOKEN`. Without that variable set, only bring-your-own keys work.
+- Diagnostics use the OpenRouter key you supplied. With no OpenRouter key they run as a rule-based estimate and the result says so.
+- No analytics. No accounts.
+
+## Run it locally
+
+Node 22 or newer.
 
 ```sh
 npm ci
 npm run dev
 ```
 
-Open http://localhost:3000. App-server heuristic diagnostics work without credentials: drafts are sent to this app's server, but not to an AI provider. Configure a DeepSeek BYOK key in Settings to rewrite or run text evaluations. Connection tests and real runs may incur charges; the automated tests use mocks only.
+Open http://localhost:3000 and add a key in Settings. Environment variables for shared access are listed in `.env.example`.
 
-## Workbench
-
-- Minimal is the default: smallest useful edit. Structured organizes supplied information. Creative authorizes optional expansion, with assumptions listed separately.
-- Missing facts are questions outside the candidate; new generated bracket variables/tags and invalid JSON are rejected. Existing literal user brackets remain valid.
-- Draft diagnostics use app-server heuristics by default, not browser-only analysis or calibrated probabilities. Your draft is transmitted to the app server. Short tasks, optional personas and static-camera intent are valid. AI-provider diagnosis requires an explicit provider selection; app-server heuristic fallback requires separate consent. There is no silent cross-provider cascade.
-- Candidates include changes, questions, assumptions, warnings and a preservation check state: passed, needs review or unavailable. Failed/unavailable checks do not become successful checks. A passed rubric is not a guarantee of downstream model quality.
-- Draft edits cancel old requests; request identities also reject late results. Diff and tests bind to the frozen original/kind/mode/profile/model. Candidate edits and restored history make old verification stale.
-- Examples and next-draft replacement support Undo. Ratio/lens controls replace a single selection instead of accumulating conflicts.
-- Text A/B sends two actual completions with the same scenario, model, temperature, output cap and kind-specific roles. If either side fails, no comparison is shown. Elapsed time is measured; usage is displayed only if returned. Visual A/B is disabled.
-- Browser-local versioned history stores originals, candidates, mode/profile/model and checks/notes. Favorites are protected from recent-history rolling eviction; explicit deletion/clear still removes them. Storage failures are surfaced. Malformed legacy history entries are skipped and legacy checks are unverified. Legacy saved credentials remain untouched until an explicit Forget choice.
-
-## Provider contracts
-
-DeepSeek defaults to `deepseek-flash` (DeepSeek-V4.1-Flash); the other supported option is `deepseek-v4-pro` (DeepSeek-V4-Pro-0813). Thinking is explicitly disabled so temperature applies. Old saved `deepseek-chat`/`deepseek-reasoner` aliases migrate to Flash/Pro, not unsupported endpoint names.
-
-Contracts reviewed 2026-10-14: [chat completions](https://api-docs.deepseek.com/api/create-chat-completion), [models/pricing](https://api-docs.deepseek.com/quick_start/pricing). Only `finish_reason: stop` is accepted; truncated/filtered/aborted/tool responses are actionable failures. JSON rewriting must satisfy the full schema, never raw-text or regex fallbacks.
-
-Profiles live in `src/lib/profiles.ts`, with version, capability and official-source links. [FLUX.2](https://docs.bfl.ai/guides/prompting_guide_flux2) has no negative prompts. Veo 3.1 is labeled a legacy workflow. Midjourney v6.1/SDXL/Kling/Runway profiles are explicitly historical or support-limited. Unknown negative-field and host syntax support is not invented. Recheck official contracts before extending a profile; no visual rendering API is integrated.
-
-## Private shared access and privacy
-
-BYOK works anonymously. Any owner-funded DeepSeek, OpenRouter or TypeSafe environment key requires a configured `APP_ACCESS_TOKEN` and the explicitly supplied matching `x-app-access-token`. Without the configured token, **all shared-key fallback is disabled**. Provider keys are resolved separately, never guessed by prefix. Comparison is constant-time over fixed-length digests. `/api/config` returns booleans only, never credentials.
-
-Optional server environment configuration:
-
-```ini
-APP_ACCESS_TOKEN=
-DEEPSEEK_API_KEY=
-OPENROUTER_API_KEY=
-TYPESAFE_API_KEY=
-```
-
-The owner must configure `APP_ACCESS_TOKEN` before using shared keys, including on Vercel. Treat it as a private shared secret, not per-user identity/authentication. Distribute it only to trusted users, rotate it when needed, use HTTPS, and add deployment firewall/access restrictions and provider spending quotas. The in-memory throttle is **per server instance**, not a distributed or durable quota. Thirty requests per minute per credential digest, a bounded 1,000-entry map, 150KB request bodies with a 15-second ingress deadline, 20,000-character prompt/scenario bounds, provider deadlines, cancellation and output caps reduce abuse but do not replace platform controls.
-
-New provider keys and the owner token live in session memory by default. Provider keys may optionally be remembered as **plaintext browser localStorage**, which is accessible to origin scripts and other users of that browser. The owner token is never persisted. Existing v2 saved credentials are not silently deleted or imported during bootstrap or v3 saves, including malformed legacy JSON. Settings reports detection metadata without displaying key values. **Import saved credentials for this session** imports only valid bounded known provider keys into memory, without a provider call, persistent writes, shared-token import or implicit AI-provider selection. App-server heuristics remain the default after import; automatic diagnosis is paused until explicitly re-enabled, so importing cannot send an existing draft. Explicitly save with browser remembering selected to persist imported keys in v3; the v2 copy still remains until **Forget legacy credentials** removes it. **Forget all credentials** explicitly clears both saved copies and session credentials. Browser storage failures are surfaced. Supported model aliases migrate on each load and are persisted when settings are explicitly saved. Do not use browser remembering on a shared device.
-
-Rewrites/evaluations send prompt data and credentials through this app's Node route handlers to the selected provider. The `local` diagnostic enum means **app-server heuristics, no AI-provider transmission**, not browser-only processing: `/api/diagnose` receives the draft on the app server. Optional AI-provider diagnostics send data through that server to the selected provider. This app does not log raw upstream bodies/credentials; errors are sanitized and include an app request ID. This is not a promise about hosting-platform logs or provider retention policies. History stays on this browser; prompts you enter may themselves contain sensitive data, so review what you submit.
-
-## Architecture
-
-Next.js 16.3.8 App Router, React 19, TypeScript, Tailwind 4. Native accessible modal dialogs share Escape/focus-wrap/focus-return/scroll-lock behavior. The draft editor is the only live draft copy; result snapshots are immutable inputs with editable candidates.
-
-`src/lib/validation.ts` checks runtime domains. `src/lib/server/` handles bounded request parsing, private shared access and errors. `src/lib/providers/completion.ts` handles bounded completions/deadlines/cancellation/schema and returned usage. `src/lib/jev.ts` handles selected external diagnostics and local rules. `src/lib/storage.ts` handles versioned persistence/migration. No client diagnostics are trusted as instructions: the server recomputes its own bounded observations.
-
-## Verification
+## Checks
 
 ```sh
 npm run lint
 npm run typecheck
-npm test
+npm test            # unit tests
+npm run test:e2e    # browser: overflow at 390, 768, 1440 px, 44px targets, focus ring, focus traps
 npm run build
-npx playwright install chromium
-npm run test:e2e
-npm audit --omit=dev
 ```
 
-For an existing browser, set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to its absolute Chrome path. CI runs lint, typecheck, unit/ReactDOM tests, build, mocked browser tests and production dependency audit. Build self-hosts Geist via Next/font and may need network access to retrieve fonts.
+### Output quality
 
-Unit tests cover invalid input, every shared provider access boundary, throttle, deadline/cancellation, redaction, completion schema, missing quality answers, local rubric behavior, modes/profiles/presets/history and race/frozen-diff behavior. Browser tests exercise keyboard dialogs, editor actions, example Undo, settings/session persistence, mocked text A/B and narrow overflow. Mocks prove software boundaries, not paid-provider quality or downstream rendering fidelity.
+Two scripts run against any deployment. Both read `OPENROUTER_API_KEY` from the environment and send it only to the optimizer under test and to openrouter.ai.
+
+```sh
+EVAL_BASE_URL=http://127.0.0.1:3000 node --env-file=.env.local evals/run-eval.ts
+node --env-file=.env.local evals/judge.ts --base http://127.0.0.1:3000 --out judge.json
+```
+
+- `run-eval.ts` runs 10 seeds through hard checks: quoted text and numbers kept, no questionnaire, length cap, injection resisted, identity lock present.
+- `judge.ts` runs the same seeds, then asks a different model (Gemini 2.5 Flash) to compare each original with its rewrite in a fixed random order. It reports how often the rewrite wins, whether it invents requirements, and how bloated it is. One run is a sample, not a benchmark.
+
+## Where things live
+
+- `src/lib/providers/chat.ts`: the pipeline above.
+- `src/lib/decisions.ts`: Decision-1 diagnostics and the quality gate, and the rule-based fallback.
+- `src/lib/optimizer-prompt.ts`: prompts, strict response parsing, preservation checks.
+- `src/lib/providers/completion.ts`: OpenRouter first, DeepSeek direct as fallback, with a deadline, abort, size cap and strict response schema.
+- `src/lib/redline.ts`: turns the original and the rewrite into keep-or-revert edits.
+- `src/lib/server/`: request limits and the access check for the server's keys.
+- `DESIGN.md`: the visual direction and the reason for each choice.
+
+## Limits
+
+- Target profiles are versioned guidance for a prompt's wording. They are not integrations, and nothing here generates an image or a video.
+- The judge and the gate are model opinions, not guarantees.
+- The per-instance request limit resets on each serverless instance. It is not a shared quota.

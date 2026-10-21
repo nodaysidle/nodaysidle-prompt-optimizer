@@ -113,14 +113,14 @@ export function mapDiagnosticAnswers(
   if (isAmbiguous > 0.6) {
     issues.push("Ambiguous scope or objective");
     unresolvedQuestions.push(
-      "What specific outcome makes this task a success? State it in the prompt — the optimizer cannot invent it for you.",
+      "What specific outcome makes this task a success? State it in the prompt. The optimizer cannot invent it for you.",
     );
   }
 
   if (lacksConstraints > 0.6) {
     issues.push("Missing output constraints the task itself would benefit from");
     unresolvedQuestions.push(
-      "What output format, length, or exclusions do you want? Specify them only if you care — they will otherwise stay unstated.",
+      "What output format, length, or exclusions do you want? Specify them only if you care. They will otherwise stay unstated.",
     );
   }
 
@@ -135,7 +135,7 @@ export function mapDiagnosticAnswers(
   if (injectionRisk > 0.5) {
     issues.push("Potential prompt injection pattern detected");
     unresolvedQuestions.push(
-      "The prompt contains override-style instructions. Decide whether they are meant for the optimizer or for your target model — they are preserved as data either way.",
+      "The prompt contains override-style instructions. Decide whether they are meant for the optimizer or for your target model. They are preserved as data either way.",
     );
   }
 
@@ -343,7 +343,7 @@ export function runHeuristicDiagnostics(text: string, kind: PromptKind): Diagnos
 
   if (isVague && !isSubjectRef) {
     issues.push("Brief or ambiguous scope");
-    unresolvedQuestions.push("What specific outcome makes this task a success? State it if you can — the optimizer cannot invent it.");
+    unresolvedQuestions.push("What specific outcome makes this task a success? State it if you can. The optimizer cannot invent it.");
   }
   if (!hasConstraints && !isSubjectRef) issues.push("Lacks explicit output constraints");
   if (!hasRole && len > 30 && kind === "system" && !isSubjectRef) {

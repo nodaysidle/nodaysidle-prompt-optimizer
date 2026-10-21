@@ -186,7 +186,18 @@ export function SettingsContent({ className }: { className?: string }) {
         </p>
       )}
       {field("deepseekApiKey", "DeepSeek API key", "deepseek")}
-      <label htmlFor="model">Rewrite and evaluation model</label>
+      <p className="help">Used for the rewrite. An OpenRouter key below can do it instead.</p>
+      {field(
+        "openrouterApiKey",
+        "OpenRouter API key (turns on Microsoft Decision-1 checks)",
+        "openrouter",
+      )}
+      <p className="help">
+        With an OpenRouter key, Microsoft Decision-1 reads your draft and checks every
+        rewrite for intent kept, bloat and whether it is better. Without one, the draft
+        read is a rule-based estimate and rewrites are not independently checked.
+      </p>
+      <label htmlFor="model">Rewrite model</label>
       <select
         id="model"
         value={draft.deepseekModel}
@@ -228,18 +239,14 @@ export function SettingsContent({ className }: { className?: string }) {
               : "Shared access disabled. Use BYOK; server keys cannot be used anonymously."}
         </p>
       </section>
-      <details>
-        <summary>Advanced diagnostics and privacy</summary>
-        {field("openrouterApiKey", "OpenRouter API key", "openrouter")}
-        <label className="check-row">
-          <input
-            type="checkbox"
-            checked={draft.autoDiagnose}
-            onChange={(e) => update("autoDiagnose", e.target.checked)}
-          />
-          Read my draft automatically as I type
-        </label>
-      </details>
+      <label className="check-row">
+        <input
+          type="checkbox"
+          checked={draft.autoDiagnose}
+          onChange={(e) => update("autoDiagnose", e.target.checked)}
+        />
+        Read my draft automatically as I type
+      </label>
       <label className="check-row">
         <input
           type="checkbox"

@@ -20,10 +20,17 @@ const DECISIONS_URL = "https://openrouter.ai/api/alpha/decisions";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 
+// Each request comes from its own address, so the per-instance throttle never interferes
+// with tests that are about something else.
+let nextAddress = 0;
 const request = (body: unknown, headers: Record<string, string> = {}) =>
   new Request("http://localhost/api", {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...headers },
+    headers: {
+      "Content-Type": "application/json",
+      "x-vercel-forwarded-for": `10.1.${Math.floor(nextAddress / 250)}.${nextAddress++ % 250}`,
+      ...headers,
+    },
     body: JSON.stringify(body),
   });
 const completion = (content = "Actual mocked output", extra = {}) =>
@@ -136,12 +143,36 @@ describe("every owner-funded access boundary", () => {
       expect(fetch).not.toHaveBeenCalled();
     },
   );
-  it("bounded per-instance throttle rejects excess", () => {
-    const req = request({}, { "x-deepseek-key": "throttle-test" });
-    throttle(req, 2, 1000);
-    throttle(req, 2, 1000);
-    expect(() => throttle(req, 2, 1000)).toThrow("limit");
-    expect(() => throttle(req, 2, 62000)).not.toThrow();
+  describe("per-instance throttle", () => {
+    const from = (address: string, headers: Record<string, string> = {}) =>
+      request({}, { "x-vercel-forwarded-for": address, ...headers });
+
+    it("rejects excess from one client and recovers after the window", () => {
+      const req = from("203.0.113.1");
+      throttle(req, 2, 1000);
+      throttle(req, 2, 1000);
+      expect(() => throttle(req, 2, 1000)).toThrow("limit");
+      expect(() => throttle(req, 2, 62000)).not.toThrow();
+    });
+
+    it("counts by client address, so rotating key headers does not dodge the limit", () => {
+      throttle(from("203.0.113.2", { "x-deepseek-key": "junk-1" }), 2, 1000);
+      throttle(from("203.0.113.2", { "x-deepseek-key": "junk-2" }), 2, 1000);
+      expect(() =>
+        throttle(from("203.0.113.2", { "x-openrouter-key": "junk-3" }), 2, 1000),
+      ).toThrow("limit");
+    });
+
+    it("keeps different clients independent", () => {
+      throttle(from("203.0.113.3"), 1, 1000);
+      expect(() => throttle(from("203.0.113.3"), 1, 1000)).toThrow("limit");
+      expect(() => throttle(from("203.0.113.4"), 1, 1000)).not.toThrow();
+    });
+
+    it("a full table never locks out a new client", () => {
+      for (let i = 0; i < 1100; i += 1) throttle(from(`198.51.100.${i}`), 30, 1000);
+      expect(() => throttle(from("192.0.2.77"), 30, 1000)).not.toThrow();
+    });
   });
 });
 

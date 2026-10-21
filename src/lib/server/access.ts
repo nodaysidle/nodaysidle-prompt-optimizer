@@ -103,18 +103,37 @@ export function serverConfig() {
     openrouter: sharedAccess && Boolean(process.env.OPENROUTER_API_KEY?.trim()),
   };
 }
+const MAX_BUCKETS = 1000;
 const buckets = new Map<string, { count: number; reset: number }>();
+
+/**
+ * Who a request counts against. Never a value the caller picks, such as a key or token
+ * header: that lets one client mint unlimited identities to dodge the limit, or fill the
+ * table so that everyone else is turned away. Behind Vercel the edge sets these headers
+ * itself, so the first address is the real client. On a host with no such proxy a caller
+ * could set them, which is why this limit is a per-instance courtesy and not a quota.
+ */
+function clientId(req: Request): string {
+  const header =
+    req.headers.get("x-vercel-forwarded-for") ||
+    req.headers.get("x-real-ip") ||
+    req.headers.get("x-forwarded-for") ||
+    "";
+  return header.split(",")[0].trim().slice(0, 100) || "unknown";
+}
+
 export function throttle(req: Request, limit = 30, now = Date.now()) {
   for (const [key, bucket] of buckets)
     if (bucket.reset <= now) buckets.delete(key);
-  const credential =
-    req.headers.get("x-app-access-token") ||
-    req.headers.get("x-deepseek-key") ||
-    req.headers.get("x-openrouter-key") ||
-    "anonymous";
-  const key = createHash("sha256").update(credential).digest("hex");
+  const key = createHash("sha256").update(clientId(req)).digest("hex");
+  // A full table drops the oldest entry. It never refuses a new client: refusing would
+  // let someone who fills the table lock every other visitor out.
+  if (!buckets.has(key) && buckets.size >= MAX_BUCKETS) {
+    const oldest = buckets.keys().next().value;
+    if (oldest !== undefined) buckets.delete(oldest);
+  }
   const bucket = buckets.get(key) || { count: 0, reset: now + 60000 };
-  if (bucket.count >= limit || (!buckets.has(key) && buckets.size >= 1000))
+  if (bucket.count >= limit)
     throw new AppError(
       "Per-instance request limit reached. Try again in one minute.",
       429,

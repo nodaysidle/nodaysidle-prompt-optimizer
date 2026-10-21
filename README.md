@@ -10,10 +10,11 @@ Live: https://nodaysidle-prompt-optimizer.vercel.app
 
 ```text
 your draft
-  -> diagnose   Microsoft Decision-1 via OpenRouter reads it (rule-based if no OpenRouter key)
+  -> diagnose   Mouse-1 reads it if MOUSE_API_KEY is set, else Microsoft Decision-1 via
+                OpenRouter (rule-based if neither answers)
   -> rewrite    DeepSeek V4.1 Flash or V4 Pro, one JSON rewrite
   -> verify     built-in checks (quoted text, numbers, code, length, no placeholders)
-                plus a Decision-1 gate: intent kept, bloat, likely better
+                plus a Mouse-1 or Decision-1 gate: intent kept, bloat, likely better
   -> repair     one second pass if verification fails
   -> result     edits you keep or revert, or your original if the rewrite did not earn its place
 ```
@@ -75,7 +76,7 @@ node --env-file=.env.local evals/judge.ts --base http://127.0.0.1:3000 --out jud
 ## Where things live
 
 - `src/lib/providers/chat.ts`: the pipeline above.
-- `src/lib/decisions.ts`: Decision-1 diagnostics and the quality gate, and the rule-based fallback.
+- `src/lib/decisions.ts`: diagnostics and the quality gate (Mouse-1, then Decision-1), and the rule-based fallback.
 - `src/lib/optimizer-prompt.ts`: prompts, strict response parsing, preservation checks.
 - `src/lib/providers/completion.ts`: OpenRouter first, DeepSeek direct as fallback, with a deadline, abort, size cap and strict response schema.
 - `src/lib/redline.ts`: turns the original and the rewrite into keep-or-revert edits.

@@ -38,6 +38,8 @@ export interface OptimizeParams {
   model: Model;
   deepseekApiKey: string;
   openrouterApiKey?: string;
+  /** Server Mouse key for diagnostics and the quality gate; tried before Decision-1. */
+  mouseApiKey?: string;
   signal?: AbortSignal;
   onStage?: (stage: Stage) => void;
 }
@@ -118,6 +120,7 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
   const diagnostics = await runDiagnostics({
     prompt: params.prompt,
     kind: params.kind,
+    mouseKey: params.mouseApiKey,
     openrouterKey: params.openrouterApiKey,
     signal: params.signal,
   });
@@ -191,10 +194,11 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
   };
 
   const evaluate = async (optimized: string): Promise<QualityGateResult | undefined> => {
-    if (!params.openrouterApiKey?.trim()) return undefined;
+    if (!params.openrouterApiKey?.trim() && !params.mouseApiKey?.trim()) return undefined;
     return runQualityGate({
       original: params.prompt,
       optimized,
+      mouseKey: params.mouseApiKey,
       openrouterKey: params.openrouterApiKey,
       signal: params.signal,
     });

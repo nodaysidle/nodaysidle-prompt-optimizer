@@ -3,6 +3,7 @@ import type { DiagnosticResult, QualityGateResult, PromptKind } from "./types";
 export interface DiagnoseParams {
   prompt: string;
   kind?: PromptKind;
+  mouseKey?: string;
   openrouterKey?: string;
   signal?: AbortSignal;
 }
@@ -10,6 +11,7 @@ export interface DiagnoseParams {
 export interface QualityGateParams {
   original: string;
   optimized: string;
+  mouseKey?: string;
   openrouterKey?: string;
   signal?: AbortSignal;
 }
@@ -187,6 +189,7 @@ export function mapDiagnosticAnswers(
 }
 
 function evaluateGateScores(
+  judge: string,
   intentPreserved: number,
   overEngineered: number,
   improvement?: number,
@@ -196,31 +199,64 @@ function evaluateGateScores(
     overEngineered,
     improvement,
     passed: intentPreserved >= GATE_SCORES.intentPreserved && overEngineered <= GATE_SCORES.overEngineered,
-    judge: "Microsoft-Decision-1",
+    judge,
   };
 }
 
-async function callDecision1OpenRouter(
-  apiKey: string,
+interface DecisionBackend {
+  url: string;
+  model: string;
+  judge: string;
+  apiKey: string;
+  timeout: number;
+}
+
+/**
+ * Backends in the order they are tried. Mouse answers the same question schema and is
+ * usually under a second when warm, so it goes first with a short timeout (a cold call
+ * can take far longer); Decision-1 on OpenRouter is the fallback.
+ */
+function decisionBackends(mouseKey?: string, openrouterKey?: string): DecisionBackend[] {
+  const backends: DecisionBackend[] = [];
+  if (mouseKey?.trim())
+    backends.push({
+      url: "https://api.mouse.dev/v1/decisions",
+      model: "mouse-1",
+      judge: "Mouse-1",
+      apiKey: mouseKey.trim(),
+      timeout: 3000,
+    });
+  if (openrouterKey?.trim())
+    backends.push({
+      url: "https://openrouter.ai/api/alpha/decisions",
+      model: "microsoft/microsoft-decision-1",
+      judge: "Microsoft-Decision-1",
+      apiKey: openrouterKey.trim(),
+      timeout: 6000,
+    });
+  return backends;
+}
+
+async function callDecisions(
+  backend: DecisionBackend,
   state: Record<string, unknown>,
   questions: Record<string, unknown>,
-  timeout = 6000,
   parent?: AbortSignal,
 ): Promise<Record<string, RawAnswer> | undefined> {
   const controller = new AbortController();
   const abort = () => controller.abort();
   if (parent?.aborted) abort();
   parent?.addEventListener("abort", abort, { once: true });
-  const timer = setTimeout(abort, timeout);
+  const timer = setTimeout(abort, backend.timeout);
   try {
-    const res = await fetch("https://openrouter.ai/api/alpha/decisions", {
+    const res = await fetch(backend.url, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey.trim()}`,
+        Authorization: `Bearer ${backend.apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "microsoft/microsoft-decision-1",
+        model: backend.model,
         state,
         questions,
       }),
@@ -228,7 +264,7 @@ async function callDecision1OpenRouter(
     });
     if (!res.ok) {
       const errText = await res.text();
-      throw new Error(`OpenRouter decisions status ${res.status}: ${errText}`);
+      throw new Error(`${backend.judge} decisions status ${res.status}: ${errText}`);
     }
     const data = await res.json();
     return data?.answers;
@@ -238,33 +274,53 @@ async function callDecision1OpenRouter(
   }
 }
 
+/**
+ * Asks each backend in turn until one returns answers that `accept` takes. Throws the last
+ * failure when every backend fails; a cancelled request is never retried on the next one.
+ */
+async function decide<T>(
+  backends: DecisionBackend[],
+  state: Record<string, unknown>,
+  questions: Record<string, unknown>,
+  accept: (answers: Record<string, RawAnswer> | undefined, backend: DecisionBackend) => T,
+  signal?: AbortSignal,
+): Promise<T> {
+  let lastError: unknown;
+  for (const backend of backends) {
+    try {
+      return accept(await callDecisions(backend, state, questions, signal), backend);
+    } catch (err) {
+      if (signal?.aborted) throw err;
+      console.warn(`${backend.judge} decisions failed:`, err);
+      lastError = err;
+    }
+  }
+  throw lastError;
+}
+
 export async function runDiagnostics(
   params: DiagnoseParams,
 ): Promise<DiagnosticResult> {
   const effectiveKind = params.kind || "user";
 
   // Keys are resolved by the route, which checks access; never read the server's key here.
-  const openRouterKey = params.openrouterKey?.trim();
+  const backends = decisionBackends(params.mouseKey, params.openrouterKey);
 
-  if (!openRouterKey) {
+  if (!backends.length) {
     return runHeuristicDiagnostics(params.prompt, effectiveKind);
   }
 
   try {
-    const answers = await callDecision1OpenRouter(
-      openRouterKey,
+    return await decide(
+      backends,
       { prompt: params.prompt },
       toDecisionShape(questionsForKind(effectiveKind)),
-      6000,
+      (answers, backend) =>
+        mapDiagnosticAnswers(answers, { kind: effectiveKind, engine: backend.model }),
       params.signal,
     );
-
-    return mapDiagnosticAnswers(answers, {
-      kind: effectiveKind,
-      engine: "microsoft/microsoft-decision-1",
-    });
   } catch (err) {
-    console.warn("Microsoft-Decision-1 diagnostics failed, falling back to heuristics:", err);
+    console.warn("Decision diagnostics failed, falling back to heuristics:", err);
     return runHeuristicDiagnostics(params.prompt, effectiveKind);
   }
 }
@@ -280,13 +336,16 @@ export async function runQualityGate(
   params: QualityGateParams,
 ): Promise<QualityGateResult | undefined> {
   // Keys are resolved by the route, which checks access; never read the server's key here.
-  const openRouterKey = params.openrouterKey?.trim();
+  const backends = decisionBackends(params.mouseKey, params.openrouterKey);
 
-  if (!openRouterKey) return undefined;
+  if (!backends.length) return undefined;
+
+  const inRange = (value: unknown): value is number =>
+    typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
 
   try {
-    const answers = await callDecision1OpenRouter(
-      openRouterKey,
+    return await decide(
+      backends,
       {
         original: params.original,
         optimized: params.optimized,
@@ -296,24 +355,22 @@ export async function runQualityGate(
         over_engineered: { type: "noul", instructions: OVER_ENGINEERED_QUESTION },
         improves: { type: "noul", instructions: IMPROVEMENT_QUESTION },
       },
-      6000,
+      (answers, backend) => {
+        if (!answers?.intent_preserved || !answers?.over_engineered) {
+          throw new Error(`${backend.judge} gate returned an incomplete answer`);
+        }
+        const intentPreserved = answers.intent_preserved.noul;
+        const overEngineered = answers.over_engineered.noul;
+        if (!inRange(intentPreserved) || !inRange(overEngineered)) {
+          throw new Error(`${backend.judge} gate returned an invalid answer`);
+        }
+        const improvement = inRange(answers.improves?.noul) ? answers.improves.noul : undefined;
+        return evaluateGateScores(backend.judge, intentPreserved, overEngineered, improvement);
+      },
       params.signal,
     );
-
-    if (!answers?.intent_preserved || !answers?.over_engineered) {
-      throw new Error("Decision-1 gate returned an incomplete answer");
-    }
-    const intentPreserved = answers.intent_preserved.noul;
-    const overEngineered = answers.over_engineered.noul;
-    const inRange = (value: unknown): value is number =>
-      typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
-    if (!inRange(intentPreserved) || !inRange(overEngineered)) {
-      throw new Error("Decision-1 gate returned an invalid answer");
-    }
-    const improvement = inRange(answers.improves?.noul) ? answers.improves.noul : undefined;
-    return evaluateGateScores(intentPreserved, overEngineered, improvement);
   } catch (err) {
-    console.warn("Decision-1 Quality Gate failed, skipping gate evaluation:", err);
+    console.warn("Decision quality gate failed, skipping gate evaluation:", err);
     return undefined;
   }
 }

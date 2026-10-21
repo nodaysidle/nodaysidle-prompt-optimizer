@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   resolveChatKeys,
   resolveKey,
+  resolveOptionalMouseKey,
   resolveOptionalOpenrouterKey,
   serverConfig,
   throttle,
@@ -17,6 +18,7 @@ import { runDiagnostics, runQualityGate } from "@/lib/decisions";
 import { readBody } from "@/lib/server/route";
 
 const DECISIONS_URL = "https://openrouter.ai/api/alpha/decisions";
+const MOUSE_URL = "https://api.mouse.dev/v1/decisions";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 
@@ -59,6 +61,7 @@ beforeEach(() => {
   vi.stubEnv("APP_ACCESS_TOKEN", "owner-token");
   vi.stubEnv("DEEPSEEK_API_KEY", "server-deepseek");
   vi.stubEnv("OPENROUTER_API_KEY", "server-openrouter");
+  vi.stubEnv("MOUSE_API_KEY", "");
   vi.spyOn(console, "warn").mockImplementation(() => {});
 });
 afterEach(() => {
@@ -688,6 +691,125 @@ describe("decisions: diagnostics and quality gate", () => {
     expect(await run()).toMatchObject({ passed: false });
     expect(await run()).toMatchObject({ passed: false });
     expect(urlOf(fetch.mock.calls[0])).toBe(DECISIONS_URL);
+  });
+});
+
+describe("decisions: Mouse-1 backend", () => {
+  const diagnosis = () =>
+    Response.json({
+      answers: {
+        clarity: { score: 3 },
+        is_ambiguous: { noul: 0.1 },
+        lacks_constraints: { noul: 0.1 },
+        injection_risk: { noul: 0 },
+      },
+    });
+  const gate = () =>
+    Response.json({
+      answers: { intent_preserved: { noul: 0.9 }, over_engineered: { noul: 0.1 } },
+    });
+
+  it("the server's Mouse key is used only with valid shared access", () => {
+    vi.stubEnv("MOUSE_API_KEY", " sk_mouse_server ");
+    expect(resolveOptionalMouseKey(request({}))).toBeUndefined();
+    expect(
+      resolveOptionalMouseKey(request({}, { "x-app-access-token": "wrong" })),
+    ).toBeUndefined();
+    expect(
+      resolveOptionalMouseKey(request({}, { "x-app-access-token": "owner-token" })),
+    ).toBe("sk_mouse_server");
+    vi.stubEnv("MOUSE_API_KEY", "");
+    expect(
+      resolveOptionalMouseKey(request({}, { "x-app-access-token": "owner-token" })),
+    ).toBeUndefined();
+  });
+  it("diagnostics ask mouse-1 first with the documented request shape", async () => {
+    const fetch = vi.fn().mockResolvedValue(diagnosis());
+    vi.stubGlobal("fetch", fetch);
+    const result = await runDiagnostics({
+      prompt: "Translate hello into French.",
+      kind: "user",
+      mouseKey: "sk_mouse_test",
+      openrouterKey: "own-openrouter",
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(urlOf(fetch.mock.calls[0])).toBe(MOUSE_URL);
+    expect(authOf(fetch.mock.calls[0])).toBe("Bearer sk_mouse_test");
+    const body = bodyOf(fetch.mock.calls[0]);
+    expect(body.model).toBe("mouse-1");
+    expect(body.state).toEqual({ prompt: "Translate hello into French." });
+    expect(body.questions.clarity.type).toBe("score");
+    expect(body.questions.injection_risk.type).toBe("noul");
+    expect(body.questions.suggested_kind.type).toBe("choice");
+    expect(result).toMatchObject({ engine: "mouse-1", clarityScore: 3 });
+    expect(result.heuristic).toBeFalsy();
+  });
+  it("a slow Mouse call is cut at 3 seconds and Decision-1 answers instead", async () => {
+    vi.useFakeTimers();
+    const fetch = vi.fn().mockImplementation((url: string, init: RequestInit) =>
+      url === MOUSE_URL
+        ? new Promise((_, reject) =>
+            init.signal?.addEventListener("abort", () => reject(new Error("aborted"))),
+          )
+        : Promise.resolve(diagnosis()),
+    );
+    vi.stubGlobal("fetch", fetch);
+    const pending = runDiagnostics({
+      prompt: "Translate hello into French.",
+      kind: "user",
+      mouseKey: "sk_mouse_test",
+      openrouterKey: "own-openrouter",
+    });
+    await vi.advanceTimersByTimeAsync(2999);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    const result = await pending;
+    vi.useRealTimers();
+    expect(urlOf(fetch.mock.calls[1])).toBe(DECISIONS_URL);
+    expect(result.engine).toBe("microsoft/microsoft-decision-1");
+  });
+  it("with only a Mouse key, a Mouse failure falls back to the rules", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response("no credits", { status: 402 }));
+    vi.stubGlobal("fetch", fetch);
+    const result = await runDiagnostics({
+      prompt: "Translate hello into French.",
+      kind: "user",
+      mouseKey: "sk_mouse_test",
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(result.heuristic).toBe(true);
+  });
+  it("the quality gate is judged by Mouse-1 and needs no OpenRouter key", async () => {
+    const fetch = vi.fn().mockResolvedValue(gate());
+    vi.stubGlobal("fetch", fetch);
+    const result = await runQualityGate({
+      original: "Original",
+      optimized: "Candidate",
+      mouseKey: "sk_mouse_test",
+    });
+    expect(urlOf(fetch.mock.calls[0])).toBe(MOUSE_URL);
+    expect(bodyOf(fetch.mock.calls[0]).state).toEqual({
+      original: "Original",
+      optimized: "Candidate",
+    });
+    expect(result).toMatchObject({ passed: true, judge: "Mouse-1" });
+  });
+  it("an invalid Mouse gate answer is retried on Decision-1, not trusted", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({ answers: { intent_preserved: { noul: "yes" } } }),
+      )
+      .mockResolvedValueOnce(gate());
+    vi.stubGlobal("fetch", fetch);
+    const result = await runQualityGate({
+      original: "Original",
+      optimized: "Candidate",
+      mouseKey: "sk_mouse_test",
+      openrouterKey: "own-openrouter",
+    });
+    expect(urlOf(fetch.mock.calls[1])).toBe(DECISIONS_URL);
+    expect(result).toMatchObject({ judge: "Microsoft-Decision-1" });
   });
 });
 

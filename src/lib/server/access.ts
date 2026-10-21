@@ -64,6 +64,15 @@ export function resolveOptionalOpenrouterKey(req: Request): string | undefined {
   return process.env.OPENROUTER_API_KEY?.trim() || undefined;
 }
 
+/**
+ * The server's Mouse key for decisions, behind the same access token as the other server
+ * keys. Unset or no access means decisions fall back to OpenRouter or the rules.
+ */
+export function resolveOptionalMouseKey(req: Request): string | undefined {
+  if (!hasSharedAccess(req)) return undefined;
+  return process.env.MOUSE_API_KEY?.trim() || undefined;
+}
+
 export function resolveKey(
   req: Request,
   provider: Provider,

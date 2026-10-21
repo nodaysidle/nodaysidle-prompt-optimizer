@@ -1,6 +1,6 @@
 import { runDiagnostics } from "@/lib/decisions";
 import { validateDomain } from "@/lib/validation";
-import { resolveOptionalOpenrouterKey } from "@/lib/server/access";
+import { resolveOptionalMouseKey, resolveOptionalOpenrouterKey } from "@/lib/server/access";
 import { readBody, routeError } from "@/lib/server/route";
 
 export async function POST(req: Request) {
@@ -10,6 +10,7 @@ export async function POST(req: Request) {
       await runDiagnostics({
         prompt: domain.prompt,
         kind: domain.kind,
+        mouseKey: resolveOptionalMouseKey(req),
         openrouterKey: resolveOptionalOpenrouterKey(req),
         signal: req.signal,
       }),

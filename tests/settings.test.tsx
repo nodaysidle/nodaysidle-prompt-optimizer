@@ -68,7 +68,7 @@ describe("explicit legacy credential choices", () => {
     expect(
       (
         screen.getByLabelText(
-          "Protected shared owner token (session only)",
+          "Protected shared owner token",
         ) as HTMLInputElement
       ).value,
     ).toBe("");

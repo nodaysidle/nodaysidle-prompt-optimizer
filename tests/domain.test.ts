@@ -287,6 +287,17 @@ describe("history and credentials", () => {
     expect(loadSettings().deepseekApiKey).toBe("byok-secret");
     expect(loadSettings().appAccessToken).toBe("");
   });
+  it("remembers the owner token only when asked, and forgets it with the rest", () => {
+    localStorage.clear();
+    saveSettings({ ...DEFAULT_SETTINGS, appAccessToken: "owner-secret", rememberToken: true });
+    expect(loadSettings()).toMatchObject({ appAccessToken: "owner-secret", rememberToken: true });
+    expect(loadSettings().deepseekApiKey).toBe("");
+    saveSettings({ ...DEFAULT_SETTINGS, appAccessToken: "owner-secret", rememberToken: false });
+    expect(localStorage.getItem("prompt-optimizer-settings-v3")).not.toContain("owner-secret");
+    saveSettings({ ...DEFAULT_SETTINGS, appAccessToken: "owner-secret", rememberToken: true });
+    forgetSettings();
+    expect(loadSettings().appAccessToken).toBe("");
+  });
   it("first load preserves legacy credentials byte-for-byte and migrates only the model", () => {
     localStorage.clear();
     const original = JSON.stringify({

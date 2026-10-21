@@ -120,6 +120,7 @@ export function loadSettings(): AppSettings {
   try {
     const value = record(JSON.parse(raw));
     const rememberKeys = value.rememberKeys === true;
+    const rememberToken = value.rememberToken === true;
     return {
       ...DEFAULT_SETTINGS,
       deepseekModel: migrateModel(value.deepseekModel),
@@ -131,6 +132,10 @@ export function loadSettings(): AppSettings {
       openrouterApiKey: rememberKeys
         ? text(value.openrouterApiKey, "Key", false, 512)
         : "",
+      rememberToken,
+      appAccessToken: rememberToken
+        ? text(value.appAccessToken, "Token", false, 512)
+        : "",
     };
   } catch {
     throw new Error(
@@ -139,13 +144,7 @@ export function loadSettings(): AppSettings {
   }
 }
 export function saveSettings(settings: AppSettings) {
-  const {
-    appAccessToken: _token,
-    deepseekApiKey,
-    openrouterApiKey,
-    ...safe
-  } = settings;
-  void _token;
+  const { appAccessToken, deepseekApiKey, openrouterApiKey, ...safe } = settings;
   localStorage.setItem(
     SETTINGS_KEY,
     JSON.stringify({
@@ -153,6 +152,7 @@ export function saveSettings(settings: AppSettings) {
       ...(settings.rememberKeys
         ? { deepseekApiKey, openrouterApiKey }
         : {}),
+      ...(settings.rememberToken ? { appAccessToken } : {}),
     }),
   );
 }

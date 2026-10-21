@@ -36,9 +36,13 @@ export function SettingsContent({ className }: { className?: string }) {
   }
   function save() {
     setSettings(draft);
+    const remembered = [
+      draft.rememberKeys && "provider keys",
+      draft.rememberToken && "owner token",
+    ].filter(Boolean);
     setStatus(
-      draft.rememberKeys
-        ? "Saved. Provider keys are remembered as plaintext in this browser; shared token is session-only."
+      remembered.length
+        ? `Saved. Remembered as plaintext in this browser: ${remembered.join(" and ")}.`
         : "Saved for this session. Provider keys and shared token are not persisted.",
     );
   }
@@ -222,7 +226,7 @@ export function SettingsContent({ className }: { className?: string }) {
       </p>
       <section className="settings-section">
         <label htmlFor="owner-token">
-          Protected shared owner token (session only)
+          Protected shared owner token
         </label>
         <input
           id="owner-token"
@@ -254,6 +258,14 @@ export function SettingsContent({ className }: { className?: string }) {
           onChange={(e) => update("rememberKeys", e.target.checked)}
         />
         Remember provider keys in this browser (plaintext)
+      </label>
+      <label className="check-row">
+        <input
+          type="checkbox"
+          checked={draft.rememberToken}
+          onChange={(e) => update("rememberToken", e.target.checked)}
+        />
+        Remember owner token in this browser (plaintext)
       </label>
       <div className="action-row">
         <button type="button" className="primary" onClick={save}>

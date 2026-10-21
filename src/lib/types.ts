@@ -111,6 +111,7 @@ export interface AppSettings {
   appAccessToken: string;
   autoDiagnose: boolean;
   rememberKeys: boolean;
+  rememberToken: boolean;
 }
 export const DEFAULT_SETTINGS: AppSettings = {
   deepseekApiKey: "",
@@ -119,6 +120,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   appAccessToken: "",
   autoDiagnose: true,
   rememberKeys: false,
+  rememberToken: false,
 };
 export interface ServerConfig {
   sharedAccess: boolean;

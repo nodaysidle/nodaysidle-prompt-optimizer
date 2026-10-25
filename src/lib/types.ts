@@ -1,3 +1,4 @@
+import type { DefectTag } from "./defects";
 export const PROMPT_KINDS = ["user", "system", "image", "video"] as const;
 export type PromptKind = (typeof PROMPT_KINDS)[number];
 export const MODES = ["minimal", "structured", "creative"] as const;
@@ -29,6 +30,8 @@ export function migrateModel(value: unknown): Model {
 }
 
 export interface DiagnosticResult {
+  /** Actionable defects the judge flagged (user/system prompts only). */
+  defectTags?: DefectTag[];
   clarityScore: number; // 0 to 3
   clarityLabel: string;
   isAmbiguous: number; // 0..1 probability

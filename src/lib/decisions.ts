@@ -1,4 +1,6 @@
-import type { DiagnosticResult, QualityGateResult, PromptKind } from "./types";
+import type { DiagnosticResult, OptimizationMode, QualityGateResult, PromptKind } from "./types";
+import { DEFECT_TAGS, DEFECT_TAG_LIST, type DefectTag } from "./defects";
+import { GATE_BY_MODE } from "./gate";
 
 export interface DiagnoseParams {
   prompt: string;
@@ -11,6 +13,7 @@ export interface DiagnoseParams {
 export interface QualityGateParams {
   original: string;
   optimized: string;
+  mode?: OptimizationMode;
   mouseKey?: string;
   openrouterKey?: string;
   signal?: AbortSignal;
@@ -37,9 +40,7 @@ const SUGGESTED_KIND_CRITERIA = {
   video: "Video or motion generation prompt (Veo 3.1, Gemini Omni 1.1)",
 };
 
-const GATE_SCORES = { intentPreserved: 0.7, overEngineered: 0.4 };
-/** Below this, a rewrite that passes the gate is treated as "not clearly better" and the original is kept. */
-export const MIN_IMPROVEMENT = 0.45;
+const DEFECT_FLAG_ABOVE = 0.65;
 
 type QuestionSpec =
   | { key: string; type: "noul"; instructions: string }
@@ -65,9 +66,19 @@ const KIND_EXTRA_QUESTIONS: Partial<Record<PromptKind, QuestionSpec[]>> = {
   ],
 };
 
+const defectKey = (tag: DefectTag) => tag.toLowerCase();
+
+const DEFECT_QUESTIONS: QuestionSpec[] = DEFECT_TAG_LIST.map((tag) => ({
+  key: defectKey(tag),
+  type: "noul",
+  instructions: DEFECT_TAGS[tag].question,
+}));
+
+const hasDefectTags = (kind: PromptKind) => kind === "user" || kind === "system";
+
 function questionsForKind(kind: PromptKind): QuestionSpec[] {
   const extras = KIND_EXTRA_QUESTIONS[kind] ?? [];
-  return [...BASE_QUESTIONS, ...extras];
+  return [...BASE_QUESTIONS, ...extras, ...(hasDefectTags(kind) ? DEFECT_QUESTIONS : [])];
 }
 
 function toDecisionShape(specs: QuestionSpec[]): Record<string, unknown> {
@@ -162,7 +173,13 @@ export function mapDiagnosticAnswers(
   if (isAmbiguous < 0.3) strengths.push("Specific and well-scoped");
   if (lacksConstraints < 0.35) strengths.push("Contains explicit boundary constraints");
 
+  // a missing answer is "not flagged", never a defect
+  const defectTags = hasDefectTags(options.kind)
+    ? DEFECT_TAG_LIST.filter((tag) => nud(answers?.[defectKey(tag)]?.noul, 0) > DEFECT_FLAG_ABOVE)
+    : [];
+
   const fields = {
+    defectTags: defectTags.length ? defectTags : undefined,
     clarityScore,
     clarityLabel: CLARITY_LEGEND[clarityScore] || "Evaluated",
     isAmbiguous,
@@ -192,13 +209,15 @@ function evaluateGateScores(
   judge: string,
   intentPreserved: number,
   overEngineered: number,
-  improvement?: number,
+  improvement: number | undefined,
+  mode: OptimizationMode,
 ): QualityGateResult {
+  const limits = GATE_BY_MODE[mode];
   return {
     intentPreserved,
     overEngineered,
     improvement,
-    passed: intentPreserved >= GATE_SCORES.intentPreserved && overEngineered <= GATE_SCORES.overEngineered,
+    passed: intentPreserved >= limits.intentPreserved && overEngineered <= limits.overEngineered,
     judge,
   };
 }
@@ -331,6 +350,8 @@ const IMPROVEMENT_QUESTION =
   "Is `optimized` more likely than `original` to get the result the user wants from the target model? Answer no if the two are about equally good or the changes are cosmetic.";
 const OVER_ENGINEERED_QUESTION =
   "Is `optimized` excessively verbose, cluttered, or bloated with filler that does not help the task? Deliberate structure requested by the user does not count as bloat.";
+const RESTRUCTURE_NOTE =
+  " The user chose Restructure mode: headings, sections, and an output-format line that organise the original's own content are requested structure, not bloat.";
 
 export async function runQualityGate(
   params: QualityGateParams,
@@ -339,6 +360,9 @@ export async function runQualityGate(
   const backends = decisionBackends(params.mouseKey, params.openrouterKey);
 
   if (!backends.length) return undefined;
+
+  const mode = params.mode ?? "minimal";
+  const overEngineeredQuestion = mode === "minimal" ? OVER_ENGINEERED_QUESTION : OVER_ENGINEERED_QUESTION + RESTRUCTURE_NOTE;
 
   const inRange = (value: unknown): value is number =>
     typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
@@ -352,7 +376,7 @@ export async function runQualityGate(
       },
       {
         intent_preserved: { type: "noul", instructions: INTENT_QUESTION },
-        over_engineered: { type: "noul", instructions: OVER_ENGINEERED_QUESTION },
+        over_engineered: { type: "noul", instructions: overEngineeredQuestion },
         improves: { type: "noul", instructions: IMPROVEMENT_QUESTION },
       },
       (answers, backend) => {
@@ -365,7 +389,7 @@ export async function runQualityGate(
           throw new Error(`${backend.judge} gate returned an invalid answer`);
         }
         const improvement = inRange(answers.improves?.noul) ? answers.improves.noul : undefined;
-        return evaluateGateScores(backend.judge, intentPreserved, overEngineered, improvement);
+        return evaluateGateScores(backend.judge, intentPreserved, overEngineered, improvement, mode);
       },
       params.signal,
     );

@@ -6,6 +6,8 @@ import type {
   QualityGateResult,
 } from "./types";
 import { PROFILES } from "./profiles";
+import { DEFECT_TAGS } from "./defects";
+import { GATE_BY_MODE } from "./gate";
 import { ProviderError } from "./providers/completion";
 
 export const IDENTITY_LOCK_OUTPUT =
@@ -282,11 +284,15 @@ export function buildDiagnosisBlock(
     ? verbatim.map((v) => `- ${v}`).join("\n")
     : "- none detected (no quoted text, code, or numbers found)";
 
+  const defectSection = diagnostics.defectTags?.length
+    ? `\nDEFECT TAGS (fix each one surgically: touch only the sentences or lines that carry it and leave every other line byte-identical):\n${diagnostics.defectTags.map((t) => `- ${t}: ${DEFECT_TAGS[t].fix}`).join("\n")}\n`
+    : "";
+
   return `DIAGNOSIS OF THE ORIGINAL PROMPT (engine: ${diagnostics.engine ?? "unknown"}):
 PRESERVE VERBATIM (the rewrite must keep these exactly; losing any of them is a defect):
 ${verbatimSection}
 RELEVANT WEAKNESSES CLAIMED BY THE DIAGNOSTIC ENGINE (fix these only where evidence in the input supports them; treat scores as an opinion, not ground truth):
-${weaknesses}
+${weaknesses}${defectSection}
 DO NOT ACT ON (dimensions that do not apply to this kind; adding them is a defect, not an improvement):
 ${nonApplicable.map((n) => `- ${n}`).join("\n")}
 UNRESOLVED QUESTIONS (information the user did not provide. Do not invent answers, and do not silently fill them with placeholders; surface anything essential in the "questions" field):
@@ -310,13 +316,14 @@ export function buildRepairMessages(
   const base = buildOptimizerMessages(prompt, kind, diagnostics, engineTarget, mode);
   if (!repair) return base;
 
+  const limits = GATE_BY_MODE[mode];
   const problems: string[] = [];
   if (repair.issues.length > 0) {
     problems.push(`Verification flagged: ${repair.issues.join("; ")}`);
   }
   if (repair.gate && !repair.gate.passed) {
     problems.push(
-      `Gate verdicts (model opinion): intent_preserved = ${repair.gate.intentPreserved.toFixed(2)} (pass needs >= 0.7), over_engineered = ${repair.gate.overEngineered.toFixed(2)} (pass needs <= 0.4).`,
+      `Gate verdicts (model opinion): intent_preserved = ${repair.gate.intentPreserved.toFixed(2)} (pass needs >= ${limits.intentPreserved}), over_engineered = ${repair.gate.overEngineered.toFixed(2)} (pass needs <= ${limits.overEngineered}).`,
     );
   }
 
@@ -334,6 +341,18 @@ ${repair.firstDraft}
 </FAILED_FIRST_REWRITE>`;
 
   return { system: repairSystem, user: repairUser };
+}
+
+/** Edit-block discipline for text prompts, plus the delimiter dialect: the target model is not known, so follow the prompt's own style. */
+function dialectGuidance(kind: PromptKind, mode: OptimizationMode, prompt: string): string {
+  if (kind === "image" || kind === "video") return "";
+  const blocks =
+    "BLOCK DISCIPLINE: one instruction per sentence or line. Edit, add or delete whole sentences or lines; never reflow unrelated lines, so each change can be kept or reverted on its own.";
+  if (mode === "minimal") return `${blocks} Keep the prompt's existing delimiter style and add no new sections.`;
+  const usesXml = /<([a-z_][\w-]*)>[\s\S]*<\/\1>/i.test(prompt);
+  return usesXml
+    ? `${blocks} The prompt already uses XML tags, so keep XML boundaries (for example <instructions>, <context>, <output_format>) and do not mix in Markdown headings.`
+    : `${blocks} Where structure helps, use a short Markdown contract with only the sections the content fills (## Task, ## Constraints, ## Output format). Do not add empty or boilerplate sections.`;
 }
 
 export function wantsNegativePrompt(kind: PromptKind, engineTarget?: EngineTarget): boolean {
@@ -377,6 +396,7 @@ Do NOT deviate from this phrasing under any circumstances.`;
 
 ${KIND_GUIDANCE[kind]}
 ${modeContext}
+${dialectGuidance(kind, mode, prompt)}
 ${engineContext}
 ${diagnosisContext}
 ${subjectRuleContext}

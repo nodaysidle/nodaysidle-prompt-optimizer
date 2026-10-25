@@ -25,7 +25,8 @@ import type {
 } from "../types";
 import { chatDeepSeek } from "./deepseek";
 import { ProviderError } from "./completion";
-import { MIN_IMPROVEMENT, runDiagnostics, runQualityGate } from "../decisions";
+import { runDiagnostics, runQualityGate } from "../decisions";
+import { GATE_BY_MODE } from "../gate";
 
 /** The real steps of one run, in order. The interface shows exactly these, never a timed animation. */
 export type Stage = "diagnose" | "rewrite" | "verify" | "repair";
@@ -198,6 +199,7 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
     return runQualityGate({
       original: params.prompt,
       optimized,
+      mode,
       mouseKey: params.mouseApiKey,
       openrouterKey: params.openrouterApiKey,
       signal: params.signal,
@@ -232,11 +234,12 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
         } (${gate.judge ?? "model"})`
       : "deterministic checks only";
 
+  const limits = GATE_BY_MODE[mode];
   const gateProblems = (gate?: QualityGateResult): string[] => {
     if (!gate || gate.passed) return [];
     const out: string[] = [];
-    if (gate.intentPreserved < 0.7) out.push(`intent match only ${Math.round(gate.intentPreserved * 100)}%`);
-    if (gate.overEngineered > 0.4) out.push(`verbosity risk ${Math.round(gate.overEngineered * 100)}%`);
+    if (gate.intentPreserved < limits.intentPreserved) out.push(`intent match only ${Math.round(gate.intentPreserved * 100)}%`);
+    if (gate.overEngineered > limits.overEngineered) out.push(`verbosity risk ${Math.round(gate.overEngineered * 100)}%`);
     return out;
   };
 
@@ -269,7 +272,7 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
 
   /** The rewrite passed but Decision-1 doesn't see it as clearly better: keep the original, offer the draft. */
   const isMarginal = (gate?: QualityGateResult) =>
-    gate?.improvement !== undefined && gate.improvement < MIN_IMPROVEMENT;
+    gate?.improvement !== undefined && gate.improvement < limits.minImprovement;
 
   const returnMarginal = (draft: ParsedRewrite, gate: QualityGateResult): OptimizationResult => {
     const rejectedDraft: RejectedDraft = {

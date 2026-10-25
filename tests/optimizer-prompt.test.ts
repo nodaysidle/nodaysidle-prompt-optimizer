@@ -156,3 +156,28 @@ describe("optimizer-addressed injection", () => {
   });
 });
 
+
+describe("defect tags and gate calibration", () => {
+  const diag = {
+    clarityScore: 1, clarityLabel: "x", isAmbiguous: 0.2, lacksConstraints: 0.2, lacksRole: 0.2,
+    injectionRisk: 0, issues: [], strengths: [], defectTags: ["VAGUE_OUTPUT_SCHEMA"],
+  } as import("@/lib/types").DiagnosticResult;
+
+  it("feeds defect tags into the rewrite prompt", async () => {
+    const { buildOptimizerMessages } = await import("@/lib/optimizer-prompt");
+    expect(buildOptimizerMessages("Summarize this.", "user", diag).system).toContain("VAGUE_OUTPUT_SCHEMA:");
+  });
+
+  it("picks the delimiter dialect from mode and the prompt's own style", async () => {
+    const { buildOptimizerMessages } = await import("@/lib/optimizer-prompt");
+    expect(buildOptimizerMessages("Summarize this.", "user", undefined, undefined, "structured").system).toContain("Markdown contract");
+    expect(buildOptimizerMessages("<instructions>Do x</instructions>", "user", undefined, undefined, "structured").system).toContain("keep XML boundaries");
+    expect(buildOptimizerMessages("Summarize this.", "user", undefined, undefined, "minimal").system).toContain("add no new sections");
+  });
+
+  it("is looser on verbosity in Restructure than in Light edit, strict on intent in both", async () => {
+    const { GATE_BY_MODE } = await import("@/lib/gate");
+    expect(GATE_BY_MODE.structured.overEngineered).toBeGreaterThan(GATE_BY_MODE.minimal.overEngineered);
+    expect(GATE_BY_MODE.structured.intentPreserved).toBe(GATE_BY_MODE.minimal.intentPreserved);
+  });
+});

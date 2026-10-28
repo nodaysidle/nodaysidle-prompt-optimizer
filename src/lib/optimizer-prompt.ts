@@ -14,12 +14,12 @@ export const IDENTITY_LOCK_OUTPUT =
   "Use photo in the attachment as only reference. Identity lock: exact likeness, facial geometry / proportions.";
 
 export function isSubjectInPhotoPrompt(prompt: string): boolean {
-  return /^the subject in the photo/i.test(prompt.trim());
+  return /^the subject (?:in|from) the photo/i.test(prompt.trim());
 }
 
 export function isOnlySubjectPrompt(prompt: string): boolean {
   if (!isSubjectInPhotoPrompt(prompt)) return false;
-  const rest = prompt.trim().replace(/^the subject in the photo(\.{1,3}|:)?\s*/i, "");
+  const rest = prompt.trim().replace(/^the subject (?:in|from) the photo(\.{1,3}|:)?\s*/i, "");
   return rest.length === 0;
 }
 
@@ -37,8 +37,8 @@ export function enforceIdentityLock(optimized: string, kind: PromptKind): string
     remaining = remaining.replace(fuzzy, "").trim();
   }
 
-  // Remove any leftover duplicate "The subject in the photo..." if present
-  remaining = remaining.replace(/^the subject in the photo(\.{1,3}|:)?\s*/i, "").trim();
+  // Remove any leftover duplicate "The subject in/from the photo..." if present
+  remaining = remaining.replace(/^the subject (?:in|from) the photo(\.{1,3}|:)?\s*/i, "").trim();
 
   if (!remaining) {
     return prefix;
@@ -82,18 +82,18 @@ const KIND_GUIDANCE: Record<PromptKind, string> = {
 - Camera/lens cues only when relevant to the shot; do not add camera movement to a still image unless lens details genuinely help the renderer.
 
 MANDATORY REFERENCE PHOTO RULE:
-If the user's prompt starts with "The subject in the photo" (e.g. "The subject in the photo..."), the output MUST start with:
+If the user's prompt starts with "The subject in the photo" or "The subject from the photo", the output MUST start with:
 "${IDENTITY_LOCK_OUTPUT}"
-followed by the rest of the visual description. If the input prompt does NOT start with "The subject in the photo" (such as "a flying dragon above paris"), do NOT apply this rule.`,
+followed by the rest of the visual description. If it starts with neither (such as "a flying dragon above paris"), do NOT apply this rule.`,
   video: `This is a VIDEO GENERATION prompt (Google Veo 3.1 or Gemini Omni 1.1).
 - Video models need motion over time: subject action progression, physics/secondary motion, and lighting evolution.
 - CRITICAL: add the [TEMPORAL ACTION & DYNAMICS] and [CAMERA PATH & CINEMATOGRAPHY] sections ONLY when the intended result actually depends on choreography or camera behavior. If the user's scene is a single held shot or self-evident motion, prefer minimal, clean additions instead of the full template.
 - When used, keep the standard video tags: [SCENE & SUBJECT], [TEMPORAL ACTION & DYNAMICS], [CAMERA PATH & CINEMATOGRAPHY], [LIGHTING & ATMOSPHERE], [NEGATIVE / ARTIFACT GUARDS]. Output plain text, never JSON.
 
 MANDATORY REFERENCE PHOTO RULE:
-If the user's prompt starts with "The subject in the photo" (e.g. "The subject in the photo..."), the output MUST start with:
+If the user's prompt starts with "The subject in the photo" or "The subject from the photo", the output MUST start with:
 "${IDENTITY_LOCK_OUTPUT}"
-followed by the rest of the structured video prompt. If the input prompt does NOT start with "The subject in the photo" (such as "a flying dragon above paris"), do NOT apply this rule.`,
+followed by the rest of the structured video prompt. If it starts with neither (such as "a flying dragon above paris"), do NOT apply this rule.`,
 };
 
 const PLACEHOLDER_RE = /\[([^\[\]\n]{1,60})\]/g;
@@ -227,6 +227,15 @@ export function maxRewriteChars(original: string, kind: PromptKind): number {
   return Math.round(original.trim().length * LENGTH_CAP[kind]);
 }
 
+/** A draft at most 10% over the cap loses its last whole sentences or lines instead of being rejected. */
+export function trimNearMiss(text: string, limit: number): string {
+  const trimmed = text.trim();
+  if (trimmed.length <= limit || trimmed.length > limit * 1.1) return trimmed;
+  const head = trimmed.slice(0, limit);
+  const cut = Math.max(head.lastIndexOf(". "), head.lastIndexOf(".\n"), head.lastIndexOf("\n"));
+  return cut > limit * 0.8 ? head.slice(0, cut + 1).trim() : trimmed;
+}
+
 export function findLengthViolation(original: string, optimized: string, kind: PromptKind): string[] {
   const limit = maxRewriteChars(original, kind);
   return optimized.trim().length > limit
@@ -331,7 +340,7 @@ export function buildRepairMessages(
 QUALITY REPAIR PASS:
 Your first rewrite FAILED verification:
 ${problems.map((p) => `- ${p}`).join("\n")}
-Produce a corrected rewrite that fixes exactly these problems. Do not restructure anything that was already correct. If the required fix conflicts with preservation, prefer preservation. If details are missing, give your single best reading of the task in "optimized" (marked as your reading in "summary" if you had to guess) and put the open points in "questions".`;
+Produce a corrected rewrite that fixes exactly these problems. Do not restructure anything that was already correct. If the required fix conflicts with preservation, prefer preservation. If details are missing, give your single best reading of the task in "optimized" (marked as your reading in "summary" if you had to guess) and put the open points in "questions". "summary" and "changes" describe the rewrite against the ORIGINAL prompt only; never mention the first rewrite, verification or this repair.`;
 
   const repairUser = `${base.user}
 
@@ -373,7 +382,7 @@ export function buildOptimizerMessages(
   if ((kind === "image" || kind === "video") && isSubjectInPhotoPrompt(prompt)) {
     subjectRuleContext = `
 STRICT IDENTITY LOCK MANDATE:
-The user prompt begins with "The subject in the photo".
+The user prompt begins with "The subject in the photo" or "The subject from the photo".
 You MUST start your "optimized" rewritten prompt with this EXACT sentence:
 "${IDENTITY_LOCK_OUTPUT}"
 ${

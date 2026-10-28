@@ -417,7 +417,7 @@ export function runHeuristicDiagnostics(text: string, kind: PromptKind): Diagnos
   else if (words > 20 && (hasConstraints || hasRole)) clarityScore = 2;
   else if (words < 8) clarityScore = 0;
 
-  const isSubjectRef = /^the subject in the photo/i.test(text.trim());
+  const isSubjectRef = /^the subject (?:in|from) the photo/i.test(text.trim());
   const issues: string[] = [];
   const strengths: string[] = [];
   const unresolvedQuestions: string[] = [];

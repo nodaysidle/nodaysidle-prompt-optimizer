@@ -110,7 +110,7 @@ function runChecks(seed: Seed, response: OptimizeResponse): CheckResult[] {
   }
 
   if (seed.kind === "image" || seed.kind === "video") {
-    if (/^the subject in the photo/i.test(seed.prompt.trim())) {
+    if (/^the subject (?:in|from) the photo/i.test(seed.prompt.trim())) {
       checks.push({
         name: "identity-lock",
         ok: optimized.startsWith(IDENTITY_LOCK_OUTPUT),

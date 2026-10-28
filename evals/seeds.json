@@ -31,6 +31,11 @@
     "prompt": "The subject in the photo walking through a rainy tokyo street at night"
   },
   {
+    "name": "video-identity-lock-from",
+    "kind": "video",
+    "prompt": "The subject from the photo walks slowly along a foggy pier at dawn, then turns toward the camera and smiles"
+  },
+  {
     "name": "video-no-camera-requested",
     "kind": "video",
     "prompt": "a single desk lamp flickers on and off in a dark study at night, one static held shot of the desk"

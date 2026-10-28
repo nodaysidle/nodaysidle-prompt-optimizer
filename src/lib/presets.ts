@@ -12,7 +12,7 @@ export function parsePresets(prompt: string): { ratio: string; lens: string } {
   };
 }
 export function addReferencePhotoInstruction(prompt: string): string {
-  return /^the subject in the photo\b/i.test(prompt.trim())
+  return /^the subject (?:in|from) the photo\b/i.test(prompt.trim())
     ? prompt
     : `The subject in the photo. ${prompt}`;
 }

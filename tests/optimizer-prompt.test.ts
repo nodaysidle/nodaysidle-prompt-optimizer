@@ -132,6 +132,8 @@ describe("identity lock helpers", () => {
     expect(isSubjectInPhotoPrompt("A flying dragon above paris")).toBe(false);
     expect(isOnlySubjectPrompt("The subject in the photo...")).toBe(true);
     expect(isOnlySubjectPrompt("The subject in the photo on a beach")).toBe(false);
+    expect(isSubjectInPhotoPrompt("The subject from the photo on a rooftop")).toBe(true);
+    expect(isOnlySubjectPrompt("The subject from the photo...")).toBe(true);
   });
 
   it("enforces the identity lock prefix for image results", () => {
@@ -179,5 +181,15 @@ describe("defect tags and gate calibration", () => {
     const { GATE_BY_MODE } = await import("@/lib/gate");
     expect(GATE_BY_MODE.structured.overEngineered).toBeGreaterThan(GATE_BY_MODE.minimal.overEngineered);
     expect(GATE_BY_MODE.structured.intentPreserved).toBe(GATE_BY_MODE.minimal.intentPreserved);
+  });
+});
+
+describe("near-miss length trim", () => {
+  it("drops trailing sentences only when the draft is at most 10% over", async () => {
+    const { trimNearMiss } = await import("@/lib/optimizer-prompt");
+    const text = "First sentence here. Second sentence here. Third one.";
+    expect(trimNearMiss(text, 100)).toBe(text);
+    expect(trimNearMiss(text, 50)).toBe("First sentence here. Second sentence here.");
+    expect(trimNearMiss(text, 30)).toBe(text);
   });
 });

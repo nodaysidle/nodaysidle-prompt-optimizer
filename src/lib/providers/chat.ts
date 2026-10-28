@@ -5,6 +5,8 @@ import {
   enforceIdentityLock,
   findFabricatedPlaceholders,
   findLengthViolation,
+  maxRewriteChars,
+  trimNearMiss,
   findPreservationViolations,
   isQuestionnairePrompt,
   isOnlySubjectPrompt,
@@ -163,6 +165,7 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
         completion,
       };
 
+      parsed.optimized = trimNearMiss(parsed.optimized, maxRewriteChars(params.prompt, params.kind));
       if (hasSubjectPrefix) {
         parsed.optimized = enforceIdentityLock(parsed.optimized, params.kind);
         if (!parsed.changes.some((c) => /identity lock|likeness|facial geometry/i.test(c))) {

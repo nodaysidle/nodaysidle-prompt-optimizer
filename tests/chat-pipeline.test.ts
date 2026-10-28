@@ -135,7 +135,7 @@ describe("optimizePrompt pipeline", () => {
     mockedGate.mockResolvedValue({ intentPreserved: 0.95, overEngineered: 0.1, passed: true });
 
     const result = await optimizePrompt({
-      prompt: "The subject in the photo standing in the rain",
+      prompt: "The subject from the photo standing in the rain",
       kind: "image",
       deepseekApiKey: "sk-test",
       model: "deepseek-v4.1-flash",
@@ -143,6 +143,8 @@ describe("optimizePrompt pipeline", () => {
     });
 
     expect(result.optimized.startsWith("Use photo in the attachment")).toBe(true);
+    // The gate judges against the locked original, so the lock itself isn't scored as drift.
+    expect(mockedGate.mock.calls[0][0].original.startsWith("Use photo in the attachment")).toBe(true);
   });
 
   it("surfaces unresolved questions in the result", async () => {

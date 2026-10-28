@@ -200,7 +200,8 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
   const evaluate = async (optimized: string): Promise<QualityGateResult | undefined> => {
     if (!params.openrouterApiKey?.trim() && !params.mouseApiKey?.trim()) return undefined;
     return runQualityGate({
-      original: params.prompt,
+      // Judge against the locked original, or the lock sentence itself reads as intent drift.
+      original: original(),
       optimized,
       mode,
       mouseKey: params.mouseApiKey,

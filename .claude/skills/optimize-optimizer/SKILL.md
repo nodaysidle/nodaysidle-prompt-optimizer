@@ -34,7 +34,8 @@ Run it as one command so `$PID` survives.
 
 - `npm run eval` with no `EVAL_BASE_URL` hits the LIVE site, not your code.
 - Stop the server by PID. `pkill -f "next start"` in a command containing that string kills your own shell.
-- Baseline: `git stash push -u -m optimizer-baseline` is unsafe here (shared stash). Use a throwaway worktree on `origin/master` for the "before" run instead.
+- Baseline: never `git stash` (the stash is shared). A throwaway worktree with a symlinked `node_modules` doesn't build either: Turbopack rejects the symlink. For the "before" run, copy the changed product files to the scratchpad (`cp --parents`), `git checkout -- <them>`, measure, then copy them back. Set the changed tests aside too: `next build` typechecks `tests/`, so a test calling a new function fails the old build. Keep new seeds and eval edits in place so both sides run the same seeds. Check the build's exit code before waiting on the server; a failed build otherwise leaves `until curl` looping forever.
+- The two measure runs take about 10 minutes together; run them with `run_in_background`.
 - Known noisy: `image-identity-lock-scene` (intent ~47-50%) and `video-no-camera-requested` fail on old code too. Don't count them as regressions without a pattern.
 - A gap of 1 seed or 1 judge win is noise. Run both sides once more and decide on the totals of 2 runs each.
 - Simplest "before" for a one-file change: copy your edited file to the scratchpad, `git checkout -- <file>`, build and measure, then copy it back.

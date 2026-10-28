@@ -7,4 +7,12 @@
   what's left, key files and open questions, so a fresh session can resume
   from it alone.
 
+## Skills and corrections
+
+- Project skills live in `.claude/skills/`: `tighten-optimizer-prompt`,
+  `optimize-optimizer`, `change-decision-model`, `ship-and-smoke`, `done-report`.
+- Whenever the user corrects you, say which skill should change and exactly how
+  (the line to add, edit or remove). Change the skill only after the user says
+  yes. If no skill fits, propose a new one the same way.
+
 @AGENTS.md

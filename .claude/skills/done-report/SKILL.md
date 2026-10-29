@@ -12,7 +12,7 @@ The user reads this once. Keep it short, plain, and honest.
 1. **Status line.** One line: shipped and smoke-tested live, or exactly which step is missing (checks, deploy, smoke) and why.
 2. **What changed.** At most 3 bullets, each naming the file and what the change does for a real prompt. No list of every edit.
 3. **Evidence.** The live before and after from the smoke run (short excerpts are fine), plus eval or judge numbers before and after if they ran. Say when a number is from a single noisy run.
-4. **My opinion.** Does this make the optimizer better? Answer yes, no, or unclear, give the reason, and say what would change your mind. Disagree with the change if the evidence is weak.
+4. **My opinion.** Is the output closer to agent-ready (clear task, context, constraints, output format, done criteria)? Does this make the optimizer better? Answer yes, no, or unclear, give the reason, and say what would change your mind. Disagree with the change if the evidence is weak.
 5. **New ideas.** Two or three concrete next steps, each one line with the file or seed it touches and why it would help. Prefer ideas the eval can measure.
 6. **Skipped / risk.** One line on what you didn't check.
 

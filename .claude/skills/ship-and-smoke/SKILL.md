@@ -23,11 +23,11 @@ Done = tested end to end, redeployed, smoke-tested live, reported. Anything less
    gh api repos/nodaysidle/nodaysidle-prompt-optimizer/deployments/$ID/statuses --jq '.[0].state'
    ```
    The Vercel MCP has no access to the `muhambals-projects` scope; use `gh`.
-6. **Propose the smoke prompt and ask for approval.** It is a real paid API call. Pick one real prompt that exercises the change (a seed from `evals/seeds.json` or one the user gave). Show the exact prompt, kind and mode, and wait for yes.
+6. **Propose the smoke prompt and ask for approval.** It is a real paid API call. Pick one real prompt that exercises the change (a seed from `evals/seeds.json` or one the user gave). For user or system prompts, use a messy, unstructured one and `--mode structured`: that's the job the user cares about. Show the exact prompt, kind and mode, and wait for yes.
 7. **Run it against production:**
    ```sh
    node --env-file=/home/arch/dev/nodaysidle/nodaysidle-prompt-optimizer/.env.local \
-     .claude/skills/ship-and-smoke/smoke.mjs --kind user --mode minimal "<prompt>"
+     .claude/skills/ship-and-smoke/smoke.mjs --kind user --mode structured "<prompt>"
    ```
    The `.env.local` lives in the main checkout (first path in `git worktree list`). Never print or echo it.
 8. **Show the before and after** exactly as printed, then hand off to the `done-report` skill.

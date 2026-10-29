@@ -5,6 +5,8 @@ description: Use when the user wants the optimizer itself to produce better rewr
 
 # Optimize the optimizer
 
+**Goal:** the user pastes a badly structured prompt; the optimizer turns it into an agent-ready one (clear task, context, constraints, output format, done criteria), filled only from what they wrote. Judge text prompts by that, in Restructure (`structured`) mode, not Light edit.
+
 A change is an improvement only if the eval says so. Your opinion comes after the numbers, not instead of them.
 
 ## Steps

@@ -16,6 +16,7 @@ interface SeedExpectations {
 interface Seed {
   name: string;
   kind: string;
+  mode?: string;
   prompt: string;
   expect?: SeedExpectations;
 }
@@ -158,7 +159,7 @@ async function main() {
           // Run with --env-file to use your own key; without it the server must hold shared keys.
           ...(process.env.OPENROUTER_API_KEY ? { "x-openrouter-key": process.env.OPENROUTER_API_KEY } : {}),
         },
-        body: JSON.stringify({ prompt: seed.prompt, kind: seed.kind }),
+        body: JSON.stringify({ prompt: seed.prompt, kind: seed.kind, mode: seed.mode }),
       });
       const elapsed = Date.now() - startedAt;
       latencyTotal += elapsed;

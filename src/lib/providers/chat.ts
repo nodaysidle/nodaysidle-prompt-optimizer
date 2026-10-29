@@ -5,6 +5,7 @@ import {
   enforceIdentityLock,
   findFabricatedPlaceholders,
   findLengthViolation,
+  maskCodeBlocks,
   maxRewriteChars,
   trimNearMiss,
   findPreservationViolations,
@@ -201,8 +202,8 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
     if (!params.openrouterApiKey?.trim() && !params.mouseApiKey?.trim()) return undefined;
     return runQualityGate({
       // Judge against the locked original, or the lock sentence itself reads as intent drift.
-      original: original(),
-      optimized,
+      original: maskCodeBlocks(original()),
+      optimized: maskCodeBlocks(optimized),
       mode,
       mouseKey: params.mouseApiKey,
       openrouterKey: params.openrouterApiKey,

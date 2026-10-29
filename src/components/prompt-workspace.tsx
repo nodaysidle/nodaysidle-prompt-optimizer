@@ -57,10 +57,14 @@ interface Failure {
   message: string;
   requestId?: string;
 }
+/** Text prompts arrive messy and leave agent-ready; visual prompts only need a light touch. */
+const defaultMode = (kind: PromptKind): OptimizationMode =>
+  kind === "image" || kind === "video" ? "minimal" : "structured";
+
 const EMPTY_DRAFT: Draft = {
   prompt: "",
   kind: "user",
-  mode: "minimal",
+  mode: defaultMode("user"),
   engineTarget: "universal",
 };
 
@@ -83,7 +87,7 @@ const MODE_LABEL: Record<OptimizationMode, string> = {
 };
 const MODE_HINT: Record<OptimizationMode, string> = {
   minimal: "The smallest useful edit. No invented context or extra requirements.",
-  structured: "Organize what you wrote. No new facts.",
+  structured: "Turns what you wrote into an agent-ready brief. No new facts.",
   creative: "Optional additions, listed as assumptions. Your hard constraints still apply.",
 };
 const VERDICT_DETAIL: Record<Verdict, string> = {
@@ -458,7 +462,7 @@ export function PromptWorkspace() {
                   type="button"
                   aria-pressed={draft.kind === kind}
                   onClick={() =>
-                    changeDraft({ ...draft, kind, engineTarget: "universal" })
+                    changeDraft({ ...draft, kind, mode: defaultMode(kind), engineTarget: "universal" })
                   }
                 >
                   {KIND_LABEL[kind]}

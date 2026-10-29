@@ -136,6 +136,16 @@ describe("running the optimizer", () => {
     expect(screen.getByRole("button", { name: "Run again" })).toBeTruthy();
   });
 
+  it("defaults text prompts to Restructure and visual prompts to Light edit", async () => {
+    await mount();
+    const pressed = (name: string) => screen.getByRole("button", { name }).getAttribute("aria-pressed");
+    expect(pressed("Restructure")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Image prompt" }));
+    expect(pressed("Light edit")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "System prompt" }));
+    expect(pressed("Restructure")).toBe("true");
+  });
+
   it("cannot run without a key, and says how to add one", async () => {
     localStorage.clear();
     await mount();

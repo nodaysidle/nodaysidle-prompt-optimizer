@@ -22,6 +22,7 @@ const JUDGE_MODEL = "google/gemini-2.5-flash";
 interface Seed {
   name: string;
   kind: "user" | "system" | "image" | "video";
+  mode?: "minimal" | "structured" | "creative";
   prompt: string;
 }
 interface Optimized {
@@ -132,7 +133,7 @@ async function main() {
           // The caller's own key: works the same on the old and new deployments.
           "x-openrouter-key": key,
         },
-        body: JSON.stringify({ prompt: seed.prompt, kind: seed.kind }),
+        body: JSON.stringify({ prompt: seed.prompt, kind: seed.kind, mode: seed.mode }),
         signal: AbortSignal.timeout(120000),
       });
       const elapsed = Date.now() - started;

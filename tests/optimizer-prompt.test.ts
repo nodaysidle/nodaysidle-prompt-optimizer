@@ -193,3 +193,19 @@ describe("near-miss length trim", () => {
     expect(trimNearMiss(text, 30)).toBe(text);
   });
 });
+
+describe("agent-ready restructure", () => {
+  it("rebuilds text prompts as a brief, leaves visual prompts alone", async () => {
+    const { buildOptimizerMessages } = await import("@/lib/optimizer-prompt");
+    expect(buildOptimizerMessages("do the thing", "user", undefined, undefined, "structured").system).toContain("agent-ready brief");
+    expect(buildOptimizerMessages("do the thing", "system", undefined, undefined, "structured").system).toContain("Done when");
+    expect(buildOptimizerMessages("a red fox", "image", undefined, undefined, "structured").system).not.toContain("agent-ready brief");
+  });
+
+  it("masks code blocks for the gate", async () => {
+    const { maskCodeBlocks } = await import("@/lib/optimizer-prompt");
+    expect(maskCodeBlocks("Fix this:\n```ts\nconst a = 1;\nconst b = 2;\n```\nThanks")).toBe(
+      "Fix this:\n[code block, 2 lines, kept verbatim]\nThanks",
+    );
+  });
+});

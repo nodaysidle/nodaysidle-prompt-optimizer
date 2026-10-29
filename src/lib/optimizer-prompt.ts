@@ -60,6 +60,9 @@ const MODE_GUIDANCE: Record<OptimizationMode, string> = {
     "MODE creative: the user authorizes optional creative expansion only where it does not conflict with supplied facts or hard constraints. List each expansion in the \"assumptions\" field. Never invent factual task context.",
 };
 
+const AGENT_READY_GUIDANCE =
+  "MODE structured: rebuild the prompt as an agent-ready brief, using only what the user wrote. Sections, each only if the user gave content for it: Goal, Context, Requirements (one testable item per line), Constraints (hard limits and do-nots), Workflow (only the steps or decision points the user described), Deliverables, Done when (from the user's own success words). Keep every requirement, named tool, version and nuance; drop filler and repetition. Never invent facts, tools, versions or success criteria. If a section the agent needs is missing, ask for it in \"questions\" instead of filling it.";
+
 function engineGuidance(engineTarget?: EngineTarget): string {
   if (!engineTarget || engineTarget === "universal") return "";
   const profile = PROFILES[engineTarget];
@@ -120,6 +123,10 @@ export function findFabricatedPlaceholders(original: string, optimized: string):
 }
 
 const CODE_FENCE_RE = /```[a-zA-Z0-9_+-]*\n?([\s\S]*?)```/g;
+/** The gate can't read code (it answers 0.50 to anything with a code block), so it sees a placeholder; preservation checks keep the code verbatim. */
+export function maskCodeBlocks(text: string): string {
+  return text.replace(CODE_FENCE_RE, (_, body: string) => `[code block, ${body.trim().split("\n").length} lines, kept verbatim]`);
+}
 const QUOTED_RE = /"([^"\n]{2,120})"|'([^'\n]{2,120})'/g;
 const NUMBER_RE = /\d+(?:[.,]\d+)*|\b\d+\b/g;
 
@@ -360,7 +367,7 @@ function dialectGuidance(kind: PromptKind, mode: OptimizationMode, prompt: strin
   const usesXml = /<([a-z_][\w-]*)>[\s\S]*<\/\1>/i.test(prompt);
   return usesXml
     ? `${blocks} The prompt already uses XML tags, so keep XML boundaries (for example <instructions>, <context>, <output_format>) and do not mix in Markdown headings.`
-    : `${blocks} Where structure helps, use a short Markdown contract with only the sections the content fills (## Task, ## Constraints, ## Output format). Do not add empty or boilerplate sections.`;
+    : `${blocks} Where structure helps, use a short Markdown contract with only the sections the content fills (## Goal, ## Context, ## Requirements, ## Constraints, ## Workflow, ## Deliverables, ## Done when). Do not add empty or boilerplate sections.`;
 }
 
 export function wantsNegativePrompt(kind: PromptKind, engineTarget?: EngineTarget): boolean {
@@ -394,7 +401,8 @@ Do NOT deviate from this phrasing under any circumstances.`;
   }
 
   const engineContext = engineGuidance(engineTarget);
-  const modeContext = MODE_GUIDANCE[mode];
+  const modeContext =
+    mode === "structured" && (kind === "user" || kind === "system") ? AGENT_READY_GUIDANCE : MODE_GUIDANCE[mode];
 
   const negativePromptSchema = wantsNegativePrompt(kind, engineTarget)
     ? `\n  "negativePrompt": "comma-separated list of 8-12 unwanted visual defects, artifacts, distortions, or morphing anomalies to avoid",`

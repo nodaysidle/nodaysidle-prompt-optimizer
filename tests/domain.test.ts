@@ -9,6 +9,7 @@ import {
 import { mapDiagnosticAnswers, runHeuristicDiagnostics } from "@/lib/decisions";
 import {
   addReferencePhotoInstruction,
+  toggleReferencePhotoInstruction,
   composePresets,
   parsePresets,
 } from "@/lib/presets";
@@ -229,6 +230,12 @@ describe("type-aware rules and profiles", () => {
     expect(
       addReferencePhotoInstruction("  THE SUBJECT IN THE PHOTO... a bird"),
     ).toBe("  THE SUBJECT IN THE PHOTO... a bird");
+  });
+  it("toggles reference photo lock cleanly", () => {
+    expect(toggleReferencePhotoInstruction("")).toBe("The subject in the photo...");
+    expect(toggleReferencePhotoInstruction("The subject in the photo...")).toBe("");
+    expect(toggleReferencePhotoInstruction("A bird in flight")).toBe("The subject in the photo. A bird in flight");
+    expect(toggleReferencePhotoInstruction("The subject in the photo. A bird in flight")).toBe("A bird in flight");
   });
 });
 describe("history and credentials", () => {

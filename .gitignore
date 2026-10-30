@@ -46,4 +46,9 @@ next-env.d.ts
 # local agent / IDE artifacts
 .commandcode/
 plans/
+.ignore
+opencode.json
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
 HANDOFF.md

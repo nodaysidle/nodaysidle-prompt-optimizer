@@ -65,10 +65,22 @@ export function resolveOptionalOpenrouterKey(req: Request): string | undefined {
 }
 
 /**
+ * The server's TypeSafe key for decisions, behind the same access token as the other server keys.
+ */
+export function resolveOptionalTypesafeKey(req: Request): string | undefined {
+  const own = req.headers.get("x-typesafe-key")?.trim();
+  if (own) return own;
+  if (!hasSharedAccess(req)) return undefined;
+  return process.env.TYPESAFE_API_KEY?.trim() || undefined;
+}
+
+/**
  * The server's Mouse key for decisions, behind the same access token as the other server
  * keys. Unset or no access means decisions fall back to OpenRouter or the rules.
  */
 export function resolveOptionalMouseKey(req: Request): string | undefined {
+  const own = req.headers.get("x-mouse-key")?.trim();
+  if (own) return own;
   if (!hasSharedAccess(req)) return undefined;
   return process.env.MOUSE_API_KEY?.trim() || undefined;
 }

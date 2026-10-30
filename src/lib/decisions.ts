@@ -5,6 +5,7 @@ import { GATE_BY_MODE } from "./gate";
 export interface DiagnoseParams {
   prompt: string;
   kind?: PromptKind;
+  typesafeKey?: string;
   mouseKey?: string;
   openrouterKey?: string;
   signal?: AbortSignal;
@@ -14,6 +15,7 @@ export interface QualityGateParams {
   original: string;
   optimized: string;
   mode?: OptimizationMode;
+  typesafeKey?: string;
   mouseKey?: string;
   openrouterKey?: string;
   signal?: AbortSignal;
@@ -231,26 +233,40 @@ interface DecisionBackend {
 }
 
 /**
- * Backends in the order they are tried. Mouse answers the same question schema and is
- * usually under a second when warm, so it goes first with a short timeout (a cold call
- * can take far longer); Decision-1 on OpenRouter is the fallback.
+ * Backends in the order they are tried. TypeSafe and Mouse answer the decision question
+ * schema; Decision-1 on OpenRouter is the primary cross-engine decision fallback.
  */
-function decisionBackends(mouseKey?: string, openrouterKey?: string): DecisionBackend[] {
+function decisionBackends(
+  typesafeKey?: string,
+  mouseKey?: string,
+  openrouterKey?: string,
+): DecisionBackend[] {
   const backends: DecisionBackend[] = [];
-  if (mouseKey?.trim())
+  const tsKey = typesafeKey?.trim();
+  if (tsKey)
+    backends.push({
+      url: "https://api.typesafe.ai/v1/decisions",
+      model: "jev-preview",
+      judge: "TypeSafe-Jev",
+      apiKey: tsKey,
+      timeout: 4000,
+    });
+  const mKey = mouseKey?.trim();
+  if (mKey)
     backends.push({
       url: "https://api.mouse.dev/v1/decisions",
       model: "mouse-1",
       judge: "Mouse-1",
-      apiKey: mouseKey.trim(),
+      apiKey: mKey,
       timeout: 3000,
     });
-  if (openrouterKey?.trim())
+  const orKey = openrouterKey?.trim();
+  if (orKey)
     backends.push({
       url: "https://openrouter.ai/api/alpha/decisions",
       model: "microsoft/microsoft-decision-1",
       judge: "Microsoft-Decision-1",
-      apiKey: openrouterKey.trim(),
+      apiKey: orKey,
       timeout: 6000,
     });
   return backends;
@@ -323,7 +339,7 @@ export async function runDiagnostics(
   const effectiveKind = params.kind || "user";
 
   // Keys are resolved by the route, which checks access; never read the server's key here.
-  const backends = decisionBackends(params.mouseKey, params.openrouterKey);
+  const backends = decisionBackends(params.typesafeKey, params.mouseKey, params.openrouterKey);
 
   if (!backends.length) {
     return runHeuristicDiagnostics(params.prompt, effectiveKind);
@@ -357,7 +373,7 @@ export async function runQualityGate(
   params: QualityGateParams,
 ): Promise<QualityGateResult | undefined> {
   // Keys are resolved by the route, which checks access; never read the server's key here.
-  const backends = decisionBackends(params.mouseKey, params.openrouterKey);
+  const backends = decisionBackends(params.typesafeKey, params.mouseKey, params.openrouterKey);
 
   if (!backends.length) return undefined;
 

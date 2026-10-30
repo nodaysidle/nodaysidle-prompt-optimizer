@@ -61,6 +61,7 @@ beforeEach(() => {
   vi.stubEnv("APP_ACCESS_TOKEN", "owner-token");
   vi.stubEnv("DEEPSEEK_API_KEY", "server-deepseek");
   vi.stubEnv("OPENROUTER_API_KEY", "server-openrouter");
+  vi.stubEnv("TYPESAFE_API_KEY", "");
   vi.stubEnv("MOUSE_API_KEY", "");
   vi.spyOn(console, "warn").mockImplementation(() => {});
 });

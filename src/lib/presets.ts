@@ -12,9 +12,23 @@ export function parsePresets(prompt: string): { ratio: string; lens: string } {
   };
 }
 export function addReferencePhotoInstruction(prompt: string): string {
+  if (!prompt.trim()) {
+    return "The subject in the photo...";
+  }
   return /^the subject (?:in|from) the photo\b/i.test(prompt.trim())
     ? prompt
     : `The subject in the photo. ${prompt}`;
+}
+
+export function toggleReferencePhotoInstruction(prompt: string): string {
+  const trimmed = prompt.trim();
+  if (/^the subject (?:in|from) the photo(?:\.{1,3}|:)?\s*$/i.test(trimmed)) {
+    return "";
+  }
+  if (/^the subject (?:in|from) the photo(?:\.{1,3}|:)?\s*/i.test(trimmed)) {
+    return trimmed.replace(/^the subject (?:in|from) the photo(?:\.{1,3}|:)?\s*/i, "").trim();
+  }
+  return trimmed ? `The subject in the photo. ${trimmed}` : "The subject in the photo...";
 }
 export function composePresets(
   prompt: string,

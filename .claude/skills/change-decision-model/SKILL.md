@@ -1,6 +1,6 @@
 ---
 name: change-decision-model
-description: Use whenever the user wants to change, add, swap, upgrade or compare a model the optimizer uses: the decision backends (mouse-1, microsoft/microsoft-decision-1) in src/lib/decisions.ts, the rewrite models in MODEL_IDS (src/lib/providers/completion.ts), or the eval judge (JUDGE_MODEL in evals/judge.ts). Also use when the user asks "which model should we use" or "is there a better model". Web research comes first, always.
+description: Use whenever the user wants to change, add, swap, upgrade or compare a model the optimizer uses: the decision backends (TypeSafe, microsoft/microsoft-decision-1 via OpenRouter) in src/lib/decisions.ts, the rewrite models in MODEL_IDS (deepseek-v4.1-flash / deepseek-flash via platform.deepseek in src/lib/providers/completion.ts), or the eval judge (JUDGE_MODEL in evals/judge.ts). Also use when the user asks "which model should we use" or "is there a better model". Web research comes first, always.
 ---
 
 # Change a decision model
@@ -10,7 +10,7 @@ Your memory of model names, prices and limits is out of date. Search first, then
 ## Steps
 
 1. **Research on the web before touching code.** For each candidate model, find from a source dated in the last few months:
-   - the exact model ID on the route the code uses (OpenRouter: `https://openrouter.ai/api/v1/models` or the model's page; DeepSeek: api-docs.deepseek.com; mouse: api.mouse.dev docs),
+   - the exact model ID on the route the code uses (OpenRouter: `https://openrouter.ai/api/v1/models` or `/api/alpha/decisions`; DeepSeek: platform.deepseek.com / api-docs.deepseek.com; TypeSafe: api.typesafe.ai),
    - price per million input and output tokens,
    - context length and whether it supports JSON or structured output,
    - real latency reports, if any,

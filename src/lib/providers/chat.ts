@@ -42,7 +42,8 @@ export interface OptimizeParams {
   model: Model;
   deepseekApiKey: string;
   openrouterApiKey?: string;
-  /** Server Mouse key for diagnostics and the quality gate; tried before Decision-1. */
+  /** Server TypeSafe key for diagnostics and the quality gate; tried before Decision-1. */
+  typesafeApiKey?: string;
   mouseApiKey?: string;
   signal?: AbortSignal;
   onStage?: (stage: Stage) => void;
@@ -124,6 +125,7 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
   const diagnostics = await runDiagnostics({
     prompt: params.prompt,
     kind: params.kind,
+    typesafeKey: params.typesafeApiKey,
     mouseKey: params.mouseApiKey,
     openrouterKey: params.openrouterApiKey,
     signal: params.signal,
@@ -199,12 +201,14 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
   };
 
   const evaluate = async (optimized: string): Promise<QualityGateResult | undefined> => {
-    if (!params.openrouterApiKey?.trim() && !params.mouseApiKey?.trim()) return undefined;
+    if (!params.openrouterApiKey?.trim() && !params.typesafeApiKey?.trim() && !params.mouseApiKey?.trim())
+      return undefined;
     return runQualityGate({
       // Judge against the locked original, or the lock sentence itself reads as intent drift.
       original: maskCodeBlocks(original()),
       optimized: maskCodeBlocks(optimized),
       mode,
+      typesafeKey: params.typesafeApiKey,
       mouseKey: params.mouseApiKey,
       openrouterKey: params.openrouterApiKey,
       signal: params.signal,

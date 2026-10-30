@@ -20,6 +20,7 @@ import {
   addReferencePhotoInstruction,
   composePresets,
   parsePresets,
+  toggleReferencePhotoInstruction,
 } from "@/lib/presets";
 import { assemble, buildRedline, editsOf } from "@/lib/redline";
 import { VERDICT_LABEL, verdictOf, type Verdict } from "@/lib/verdict";
@@ -513,7 +514,33 @@ export function PromptWorkspace() {
 
           <div className="choice">
             <div className="pane-heading">
-              <label htmlFor="draft">Draft</label>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                <label htmlFor="draft">Draft</label>
+                {visual && (
+                  <button
+                    type="button"
+                    aria-pressed={isSubjectInPhotoPrompt(draft.prompt)}
+                    style={{
+                      minHeight: "2rem",
+                      padding: "0.25rem 0.75rem",
+                      fontSize: "0.8125rem",
+                      fontWeight: 600,
+                      letterSpacing: "0.02em",
+                      borderColor: isSubjectInPhotoPrompt(draft.prompt) ? "var(--red, #e10600)" : "var(--edge)",
+                      color: isSubjectInPhotoPrompt(draft.prompt) ? "var(--red-small, #ff6b63)" : "var(--ink)",
+                      backgroundColor: isSubjectInPhotoPrompt(draft.prompt) ? "rgba(225, 6, 0, 0.12)" : "transparent",
+                    }}
+                    onClick={() => {
+                      const prompt = toggleReferencePhotoInstruction(draft.prompt);
+                      changeDraft({ ...draft, prompt }, true);
+                    }}
+                  >
+                    {isSubjectInPhotoPrompt(draft.prompt)
+                      ? "Reference Photo Lock active"
+                      : "+ Reference Photo Lock"}
+                  </button>
+                )}
+              </div>
               <span className="help">{draft.prompt.length} of 20000 characters</span>
             </div>
             <textarea

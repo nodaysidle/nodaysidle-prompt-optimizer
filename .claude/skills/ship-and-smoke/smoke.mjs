@@ -36,5 +36,8 @@ if (!res.ok || body.error) {
 console.log(`\n--- BEFORE (${kind}, ${mode}) ---\n${prompt}`);
 console.log(`\n--- AFTER ---\n${body.optimized}`);
 console.log(`\n--- SUMMARY ---\n${body.summary ?? "(none)"}`);
+if (body.unresolvedQuestions?.length) {
+  console.log(`\n--- QUESTIONS ---\n${body.unresolvedQuestions.map((q) => `• ${q}`).join("\n")}`);
+}
 if (body.qualityGate) console.log(`\nGATE: ${JSON.stringify(body.qualityGate)}`);
 if (body.rejectedDraft) console.log("NOTE: the gate rejected a draft and kept the original.");

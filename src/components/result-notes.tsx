@@ -1,5 +1,7 @@
 "use client";
+import { useEffect, useRef, useState } from "react";
 import { PROFILES } from "@/lib/profiles";
+import { KIND_LABEL, MODE_LABEL } from "@/lib/labels";
 import type { DraftSnapshot, OptimizationResult } from "@/lib/types";
 
 const GROUPS = [
@@ -17,10 +19,25 @@ export function ResultNotes({
 }: {
   result: OptimizationResult;
   snapshot: DraftSnapshot;
-  onCopy: (value: string) => void;
+  onCopy: (value: string) => Promise<boolean>;
 }) {
   const gate = result.qualityGate;
   const completion = result.completion;
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
+  async function copyNegative() {
+    if (!result.negativePrompt) return;
+    if (!(await onCopy(result.negativePrompt))) return;
+    setCopied(true);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setCopied(false), 1600);
+  }
   return (
     <section className="notes" aria-label="Notes on the rewrite">
       <h2>Why</h2>
@@ -41,8 +58,8 @@ export function ResultNotes({
         <div>
           <h3>Separate negative prompt for {PROFILES[snapshot.engineTarget].label}</h3>
           <pre>{result.negativePrompt}</pre>
-          <button type="button" onClick={() => onCopy(result.negativePrompt || "")}>
-            Copy negative prompt
+          <button type="button" onClick={copyNegative}>
+            {copied ? "Copied" : "Copy negative prompt"}
           </button>
         </div>
       )}
@@ -51,9 +68,11 @@ export function ResultNotes({
         <dl className="record">
           <dt>Setting</dt>
           <dd>
-            {snapshot.kind}, {snapshot.mode}, {PROFILES[snapshot.engineTarget].label}{" "}
-            ({snapshot.profileVersion})
+            {KIND_LABEL[snapshot.kind]}, {MODE_LABEL[snapshot.mode]},{" "}
+            {PROFILES[snapshot.engineTarget].label}
           </dd>
+          <dt>Profile</dt>
+          <dd>{snapshot.profileVersion}</dd>
           {completion && (
             <>
               <dt>Model</dt>

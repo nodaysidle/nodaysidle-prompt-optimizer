@@ -11,7 +11,7 @@ const LIT: Record<RunStage, number> = {
 };
 
 export const STAGE_LABEL: Record<RunStage, string> = {
-  idle: "",
+  idle: "Start lights",
   sent: "Sending your prompt",
   diagnose: "Reading your prompt",
   rewrite: "Rewriting",

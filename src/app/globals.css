@@ -70,8 +70,8 @@ body {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem 1.5rem;
+  justify-content: flex-start;
+  gap: 0.5rem 0.75rem;
   padding: 0.75rem var(--gutter);
   border-bottom: 1px solid var(--line);
 }
@@ -102,6 +102,7 @@ body {
 .bar nav {
   display: flex;
   gap: 0.5rem;
+  margin-left: auto;
 }
 
 /* Two columns on desktop, one on phones. The draft and its redline sit together. */
@@ -140,11 +141,18 @@ h2,
 h3 {
   margin: 0;
 }
-.notes h2,
-.read h2 {
+.notes h2 {
   font-family: var(--display);
   font-weight: 600;
   font-size: 1.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.read-title {
+  margin: 0;
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 1.125rem;
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
@@ -192,9 +200,9 @@ button.primary {
   font-weight: 600;
 }
 button.primary:hover:not(:disabled) {
-  background: var(--red);
-  border-color: var(--red);
-  color: #fff;
+  background: transparent;
+  border-color: var(--ink);
+  color: var(--ink);
 }
 button.primary:disabled {
   background: transparent;
@@ -258,6 +266,24 @@ legend {
   justify-content: space-between;
   gap: 0.25rem 1rem;
 }
+.draft-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  min-width: 0;
+}
+/* A real toggle, in the same ink language as the segmented controls. Never red. */
+.lock {
+  font-size: 0.8125rem;
+  letter-spacing: 0.01em;
+}
+.lock[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
+  font-weight: 600;
+}
 
 /* Segmented choice: the selected option is a solid ink block, so it needs no color to read. */
 .seg {
@@ -302,6 +328,11 @@ summary {
 }
 
 /* The run: the main action and the start lights beside it. */
+.run-note {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--ink-2);
+}
 .run {
   display: flex;
   flex-wrap: wrap;
@@ -508,6 +539,39 @@ summary {
   text-decoration-thickness: 2px;
 }
 
+/* What the result will look like, shown before the first run. Static and labelled. */
+.sample {
+  margin: 0;
+  border-top: 1px solid var(--line);
+  padding-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.sample-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 1.125rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.sample-title span {
+  font-family: var(--text);
+  font-size: 0.8125rem;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--label);
+}
+.sample-help {
+  margin: 0;
+}
+
 .problems {
   border: 1px solid var(--red-ink);
   padding: 0.75rem 1rem;
@@ -574,19 +638,32 @@ a:hover {
 
 /* Dialogs: settings, history, output comparison. Flat, bordered, no shadow. */
 dialog.workbench-dialog {
+  --pad: 1.5rem;
   width: min(44rem, calc(100% - 2rem));
   max-height: calc(100dvh - 2rem);
   margin: auto;
-  padding: 1.5rem;
+  padding: var(--pad);
   background: var(--bg);
   color: var(--ink);
   border: 1px solid var(--ink);
-  overflow-y: auto;
+  overflow: hidden;
 }
 dialog.workbench-dialog[open] {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+.dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+.dialog-footer {
+  border-top: 1px solid var(--line);
+  padding-top: 0.75rem;
 }
 dialog.workbench-dialog::backdrop {
   background: rgb(0 0 0 / 0.8);
@@ -611,6 +688,90 @@ dialog.workbench-dialog::backdrop {
   gap: 0.5rem;
   padding-top: 1rem;
   border-top: 1px solid var(--line);
+}
+.settings-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.settings-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.settings-intro {
+  margin: 0;
+}
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.settings-field-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.settings-check-help {
+  margin-top: -0.25rem;
+}
+.settings-disclosure {
+  border-top: 1px solid var(--line);
+  padding-top: 0.5rem;
+}
+.settings-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.settings-page .settings-footer {
+  border-top: 1px solid var(--line);
+  padding-top: 0.75rem;
+}
+.settings-footer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.settings-status {
+  margin: 0;
+}
+.settings-status:empty {
+  display: none;
+}
+.history-preview {
+  margin: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--mono);
+  font-size: 0.9375rem;
+}
+.history-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  border-top: 1px solid var(--line);
+  padding-top: 1rem;
+}
+.history-empty p {
+  margin: 0;
+}
+.history-confirm {
+  border: 1px solid var(--edge);
+  padding: 0.75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.history-confirm p {
+  margin: 0;
 }
 .settings-page {
   max-width: 44rem;
@@ -653,11 +814,31 @@ dialog.workbench-dialog::backdrop {
 
 /* Phones: one column, controls fill the width, nothing scrolls sideways. */
 @media (max-width: 40rem) {
+  .bar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    align-items: center;
+    column-gap: 1rem;
+    row-gap: 0.125rem;
+  }
+  .brand {
+    grid-column: 1;
+    grid-row: 1;
+  }
   .brand-tool {
-    flex-basis: 100%;
+    grid-column: 1;
+    grid-row: 2;
+    font-size: 0.9375rem;
+  }
+  .bar nav {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    margin-left: 0;
   }
   .seg button,
-  .action-row button {
+  .action-row button,
+  .settings-footer-actions button {
     flex: 1 1 auto;
   }
   .run .primary {
@@ -670,7 +851,37 @@ dialog.workbench-dialog::backdrop {
   .record {
     grid-template-columns: minmax(0, 1fr);
   }
+  .draft-head {
+    gap: 0.25rem 0.5rem;
+  }
+  .stage {
+    padding-top: 1rem;
+  }
   dialog.workbench-dialog {
-    padding: 1rem;
+    --pad: 1rem;
+  }
+}
+
+/* The two-column header stops fitting below about 380px. Stack it instead. */
+@media (max-width: 23.75rem) {
+  .bar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .brand {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .brand-tool {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .bar nav {
+    grid-column: 1;
+    grid-row: 3;
+    margin-left: 0;
+  }
+  .seg-kinds {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
   }
 }

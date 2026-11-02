@@ -10,7 +10,16 @@ import {
 import { MODEL_SOURCE } from "@/lib/profiles";
 import { Dialog } from "./dialog";
 
-export function SettingsContent({ className }: { className?: string }) {
+interface SettingsContentProps {
+  className?: string;
+  onClose?: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
+}
+
+function useSettingsForm({
+  onClose,
+  onDirtyChange,
+}: SettingsContentProps = {}) {
   const {
     settings,
     setSettings,
@@ -26,7 +35,23 @@ export function SettingsContent({ className }: { className?: string }) {
   const [tested, setTested] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const controller = useRef<AbortController | null>(null);
+  const keyInput = useRef<HTMLInputElement | null>(null);
+  const dirty = JSON.stringify(draft) !== JSON.stringify(settings);
+  const dirtyRef = useRef(onDirtyChange);
+
+  useEffect(() => {
+    dirtyRef.current = onDirtyChange;
+  }, [onDirtyChange]);
   useEffect(() => () => controller.current?.abort(), []);
+  useEffect(() => {
+    // The first useful control, not the Close button, takes focus.
+    const timer = window.setTimeout(() => keyInput.current?.focus(), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+  useEffect(() => {
+    dirtyRef.current?.(dirty);
+  }, [dirty]);
+
   function update<K extends keyof AppSettings>(key: K, value: AppSettings[K]) {
     controller.current?.abort();
     setBusy(false);
@@ -43,8 +68,16 @@ export function SettingsContent({ className }: { className?: string }) {
     setStatus(
       remembered.length
         ? `Saved. Remembered as plaintext in this browser: ${remembered.join(" and ")}.`
-        : "Saved for this session. Provider keys and shared token are not persisted.",
+        : "Saved for this session. Provider keys and the shared token are not persisted.",
     );
+  }
+  function cancel() {
+    controller.current?.abort();
+    setBusy(false);
+    setDraft(settings);
+    setTested({});
+    setStatus("");
+    onClose?.();
   }
   function handleImportLegacy() {
     controller.current?.abort();
@@ -54,7 +87,7 @@ export function SettingsContent({ className }: { className?: string }) {
     setDraft(imported);
     setTested({});
     setStatus(
-      "Valid saved provider keys imported for this session only. No provider request was sent; automatic diagnosis is paused. Legacy saved data is unchanged; use Forget legacy credentials to remove that copy.",
+      "Saved provider keys imported for this session only. No provider request was sent; automatic diagnosis is paused. Legacy saved data is unchanged.",
     );
   }
   function handleForgetLegacy() {
@@ -63,6 +96,14 @@ export function SettingsContent({ className }: { className?: string }) {
         "Legacy saved copy removed. Current session credentials are unchanged.",
       );
     }
+  }
+  function forgetAll() {
+    controller.current?.abort();
+    setBusy(false);
+    forget();
+    setDraft({ ...DEFAULT_SETTINGS });
+    setTested({});
+    setStatus("Credentials forgotten. Shared access disconnected.");
   }
   async function test(provider: "deepseek" | "openrouter") {
     controller.current?.abort();
@@ -112,47 +153,183 @@ export function SettingsContent({ className }: { className?: string }) {
     provider: "deepseek" | "openrouter",
   ) {
     const access = draft[key]
-      ? "BYOK configured (not yet tested)"
+      ? tested[provider] || "Key added, not tested"
       : server?.[provider] && draft.appAccessToken
-        ? "Protected shared access supplied (not yet tested)"
+        ? "Shared access supplied, not tested"
         : server?.[provider]
-          ? "Protected shared access requires owner token"
-          : "Unavailable until a BYOK key is supplied";
+          ? "The server has shared access. Add the owner token below, or use your own key."
+          : "No key yet.";
     return (
-      <section className="settings-section">
+      <div className="settings-field">
         <label htmlFor={key}>{label}</label>
         <input
+          ref={key === "deepseekApiKey" ? keyInput : undefined}
           id={key}
           type="password"
           autoComplete="off"
           value={draft[key]}
           onChange={(e) => update(key, e.target.value)}
         />
-        <div className="action-row">
-          <span>{tested[provider] || access}</span>
+        <div className="settings-field-foot">
+          <span className="help">{access}</span>
           <button type="button" disabled={busy} onClick={() => test(provider)}>
             Test {provider}
           </button>
         </div>
-      </section>
+      </div>
     );
   }
+  return {
+    draft,
+    status,
+    error,
+    server,
+    legacy,
+    busy,
+    keyInput,
+    update,
+    save,
+    cancel,
+    handleImportLegacy,
+    handleForgetLegacy,
+    forgetAll,
+    field,
+    onClose,
+  };
+}
+type SettingsForm = ReturnType<typeof useSettingsForm>;
+
+function SettingsFields({ form }: { form: SettingsForm }) {
+  const {
+    draft,
+    update,
+    field,
+    server,
+    legacy,
+    handleImportLegacy,
+    handleForgetLegacy,
+    forgetAll,
+  } = form;
   return (
-    <div className={className}>
-      <p className="help">
-        Default diagnosis sends your draft to this app&apos;s server for
-        heuristics, with no AI-provider transmission. Rewrites and text
-        evaluations send prompts and credentials through this app&apos;s server
-        to DeepSeek. AI-provider diagnostics send prompt data to your explicitly
-        selected provider. Use HTTPS in production.
+    <div className="settings-fields">
+      <p className="help settings-intro">
+        Paste a DeepSeek or OpenRouter key to run the optimizer. Keys stay in
+        this tab unless you choose to remember them. Requests go through this
+        app&apos;s server to the provider you choose.
       </p>
-      <p className="help">
-        New keys stay in session memory unless you explicitly remember them.
-        Remembered keys are plaintext and accessible to scripts on this origin.
-        Legacy saved credentials stay untouched until you explicitly forget
-        them; importing is session-only. Old model aliases migrate to Flash/Pro.
-        The shared owner token is never remembered.
-      </p>
+
+      <section className="settings-section" aria-label="Provider keys">
+        {field("deepseekApiKey", "DeepSeek API key", "deepseek")}
+        <p className="help">
+          Used for the rewrite. An OpenRouter key can do it instead.
+        </p>
+        {field("openrouterApiKey", "OpenRouter API key", "openrouter")}
+        <p className="help">
+          Adds Microsoft Decision-1 checks: intent kept, bloat, and whether the
+          rewrite is better. Without it, the draft read is rule-based and
+          rewrites are not independently checked.
+        </p>
+      </section>
+
+      <section className="settings-section" aria-label="Rewrite model">
+        <label htmlFor="model">Rewrite model</label>
+        <select
+          id="model"
+          value={draft.deepseekModel}
+          onChange={(e) =>
+            update(
+              "deepseekModel",
+              e.target.value as AppSettings["deepseekModel"],
+            )
+          }
+        >
+          {MODELS.map((model) => (
+            <option key={model}>{model}</option>
+          ))}
+        </select>
+        <p className="help">
+          Nonthinking mode is explicitly enabled for reproducible temperature
+          settings.{" "}
+          <a href={MODEL_SOURCE} target="_blank" rel="noreferrer">
+            Model contract
+          </a>{" "}
+          reviewed 2026-10-14.
+        </p>
+      </section>
+
+      <details className="settings-disclosure">
+        <summary>Reading and storage options</summary>
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={draft.autoDiagnose}
+            onChange={(e) => update("autoDiagnose", e.target.checked)}
+          />
+          Read my draft automatically as I type
+        </label>
+        <p className="help settings-check-help">
+          Automatic reads run after you stop typing. With an OpenRouter key,
+          each read is a model call.
+        </p>
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={draft.rememberKeys}
+            onChange={(e) => update("rememberKeys", e.target.checked)}
+          />
+          Remember provider keys in this browser (plaintext)
+        </label>
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={draft.rememberToken}
+            onChange={(e) => update("rememberToken", e.target.checked)}
+          />
+          Remember owner token in this browser (plaintext)
+        </label>
+        <div className="action-row">
+          <button type="button" onClick={forgetAll}>
+            Forget all credentials
+          </button>
+        </div>
+      </details>
+
+      <details className="settings-disclosure">
+        <summary>Shared access (owner)</summary>
+        <label htmlFor="owner-token">Protected shared owner token</label>
+        <input
+          id="owner-token"
+          type="password"
+          autoComplete="off"
+          value={draft.appAccessToken}
+          onChange={(e) => update("appAccessToken", e.target.value)}
+        />
+        <p className="help">
+          {server === null
+            ? "Server status unavailable."
+            : server.sharedAccess
+              ? "Shared access is protected by the owner's token. Supplying a token is not proof that it is valid; test access."
+              : "Shared access disabled. Use your own key; server keys cannot be used anonymously."}
+        </p>
+      </details>
+
+      <details className="settings-disclosure">
+        <summary>How your data is handled</summary>
+        <p className="help">
+          Default diagnosis sends your draft to this app&apos;s server for
+          heuristics, with no AI-provider transmission. Rewrites and text
+          evaluations send prompts and credentials through this app&apos;s
+          server to DeepSeek. AI-provider diagnostics send prompt data to the
+          provider you selected.
+        </p>
+        <p className="help">
+          Remembered keys are plaintext and accessible to scripts on this
+          origin. The shared owner token is never remembered. Legacy saved
+          credentials stay untouched until you explicitly forget them;
+          importing is session-only. Old model aliases migrate to Flash and Pro.
+        </p>
+      </details>
+
       {legacy.detected && (
         <section
           className="settings-section"
@@ -162,7 +339,7 @@ export function SettingsContent({ className }: { className?: string }) {
           <p className="help">
             {legacy.malformed
               ? "Legacy saved settings could not be parsed. They remain unchanged and recoverable; nothing has been imported."
-              : "The previous saved copy is unchanged. Import only valid provider keys into this session without sending a provider request or remembering them again. Diagnosis remains app-server heuristics; automatic diagnosis is paused on import. Shared access is not imported."}
+              : "The previous saved copy is unchanged. Import only valid provider keys into this session without sending a provider request or remembering them again. Automatic diagnosis is paused on import. Shared access is not imported."}
           </p>
           {legacy.invalidKeys && (
             <p className="help">
@@ -184,110 +361,68 @@ export function SettingsContent({ className }: { className?: string }) {
           </div>
         </section>
       )}
-      {(error || status) && (
-        <p role="status" className="feedback">
-          {error || status}
-        </p>
-      )}
-      {field("deepseekApiKey", "DeepSeek API key", "deepseek")}
-      <p className="help">Used for the rewrite. An OpenRouter key below can do it instead.</p>
-      {field(
-        "openrouterApiKey",
-        "OpenRouter API key (turns on Microsoft Decision-1 checks)",
-        "openrouter",
-      )}
-      <p className="help">
-        With an OpenRouter key, Microsoft Decision-1 reads your draft and checks every
-        rewrite for intent kept, bloat and whether it is better. Without one, the draft
-        read is a rule-based estimate and rewrites are not independently checked.
-      </p>
-      <label htmlFor="model">Rewrite model</label>
-      <select
-        id="model"
-        value={draft.deepseekModel}
-        onChange={(e) =>
-          update(
-            "deepseekModel",
-            e.target.value as AppSettings["deepseekModel"],
-          )
-        }
-      >
-        {MODELS.map((model) => (
-          <option key={model}>{model}</option>
-        ))}
-      </select>
-      <p className="help">
-        Nonthinking mode is explicitly enabled for reproducible temperature
-        settings.{" "}
-        <a href={MODEL_SOURCE} target="_blank" rel="noreferrer">
-          Model contract
-        </a>{" "}
-        reviewed 2026-10-14.
-      </p>
-      <section className="settings-section">
-        <label htmlFor="owner-token">
-          Protected shared owner token
-        </label>
-        <input
-          id="owner-token"
-          type="password"
-          autoComplete="off"
-          value={draft.appAccessToken}
-          onChange={(e) => update("appAccessToken", e.target.value)}
-        />
-        <p className="help">
-          {server === null
-            ? "Server status unavailable."
-            : server.sharedAccess
-              ? "Shared access is protected by the owner's token. Supplying a token is not proof that it is valid; test access."
-              : "Shared access disabled. Use BYOK; server keys cannot be used anonymously."}
-        </p>
-      </section>
-      <label className="check-row">
-        <input
-          type="checkbox"
-          checked={draft.autoDiagnose}
-          onChange={(e) => update("autoDiagnose", e.target.checked)}
-        />
-        Read my draft automatically as I type
-      </label>
-      <label className="check-row">
-        <input
-          type="checkbox"
-          checked={draft.rememberKeys}
-          onChange={(e) => update("rememberKeys", e.target.checked)}
-        />
-        Remember provider keys in this browser (plaintext)
-      </label>
-      <label className="check-row">
-        <input
-          type="checkbox"
-          checked={draft.rememberToken}
-          onChange={(e) => update("rememberToken", e.target.checked)}
-        />
-        Remember owner token in this browser (plaintext)
-      </label>
-      <div className="action-row">
-        <button type="button" className="primary" onClick={save}>
-          Save settings
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            controller.current?.abort();
-            setBusy(false);
-            forget();
-            setDraft({ ...DEFAULT_SETTINGS });
-            setTested({});
-            setStatus("Credentials forgotten. Shared access disconnected.");
-          }}
-        >
-          Forget all credentials
-        </button>
-      </div>
     </div>
   );
 }
+
+function SettingsFooter({ form }: { form: SettingsForm }) {
+  const { error, status, save, cancel, onClose } = form;
+  return (
+    <div className="settings-footer">
+      <div className="settings-footer-actions">
+        <button type="button" className="primary" onClick={save}>
+          Save settings
+        </button>
+        {onClose && (
+          <button type="button" onClick={cancel}>
+            Cancel
+          </button>
+        )}
+      </div>
+      <p role="status" className="feedback settings-status">
+        {error || status}
+      </p>
+    </div>
+  );
+}
+
+export function SettingsContent({
+  className,
+  onClose,
+  onDirtyChange,
+}: SettingsContentProps) {
+  const form = useSettingsForm({ onClose, onDirtyChange });
+  return (
+    <div className={className ? `settings-content ${className}` : "settings-content"}>
+      <SettingsFields form={form} />
+      <SettingsFooter form={form} />
+    </div>
+  );
+}
+
+function SettingsDialog({ onClose }: { onClose: () => void }) {
+  const dirty = useRef(false);
+  const form = useSettingsForm({
+    onClose,
+    onDirtyChange: (value) => {
+      dirty.current = value;
+    },
+  });
+  return (
+    <Dialog
+      title="Settings"
+      onClose={onClose}
+      beforeClose={() => {
+        if (!dirty.current) return true;
+        return window.confirm("Discard unsaved settings?");
+      }}
+      footer={<SettingsFooter form={form} />}
+    >
+      <SettingsFields form={form} />
+    </Dialog>
+  );
+}
+
 export function SettingsPanel({
   open,
   onClose,
@@ -295,12 +430,9 @@ export function SettingsPanel({
   open: boolean;
   onClose: () => void;
 }) {
-  return open ? (
-    <Dialog title="Settings" onClose={onClose}>
-      <SettingsContent />
-    </Dialog>
-  ) : null;
+  return open ? <SettingsDialog onClose={onClose} /> : null;
 }
+
 export function SettingsPageView() {
   return (
     <main className="settings-page">

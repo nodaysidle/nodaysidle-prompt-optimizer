@@ -146,12 +146,15 @@ describe("running the optimizer", () => {
     expect(pressed("Restructure")).toBe("true");
   });
 
-  it("cannot run without a key, and says how to add one", async () => {
+  it("cannot run without a key, and the button opens the fix", async () => {
     localStorage.clear();
     await mount();
     type(ORIGINAL);
-    expect((screen.getByRole("button", { name: "Optimize prompt" }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByText(/Add a DeepSeek or OpenRouter key/)).toBeTruthy();
+    const button = screen.getByRole("button", {
+      name: "Add a key to start",
+    }) as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    expect(screen.getByText(/Keys stay in this tab/)).toBeTruthy();
   });
 
   it("states plainly when the original was kept and offers the rejected draft", async () => {
@@ -187,6 +190,7 @@ describe("state that must not leak between runs", () => {
     run();
     type("New task");
     await act(async () => pending.resolve(OK_RUN()));
+    expect(screen.queryByRole("button", { name: "Revert this edit" })).toBeNull();
     expect(screen.queryByText(/Edit 1 of/)).toBeNull();
     expect(draftBox().value).toBe("New task");
   });
@@ -269,7 +273,7 @@ describe("the draft side", () => {
     fireEvent.click(screen.getByText("Examples and visual options"));
     fireEvent.change(screen.getByLabelText(/Example for/), { target: { value: "2" } });
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(650);
+      await vi.advanceTimersByTimeAsync(1050);
     });
     expect(fetch.mock.calls.filter(([url]) => url === "/api/diagnose")).toHaveLength(1);
     expect(fetch.mock.calls.some(([url]) => url === "/api/optimize")).toBe(false);
@@ -284,6 +288,41 @@ describe("the draft side", () => {
     type("My prompt");
     fireEvent.click(screen.getByRole("button", { name: "Copy draft" }));
     await waitFor(() => expect(screen.getByText(/clipboard is unavailable/i)).toBeTruthy());
+  });
+
+  it("confirms the copy on the button that did it", async () => {
+    vi.stubGlobal("navigator", {
+      ...navigator,
+      clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
+    });
+    await mount();
+    type("My prompt");
+    fireEvent.click(screen.getByRole("button", { name: "Copy draft" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Copied" })).toBeTruthy(),
+    );
+  });
+
+  it("cancels a run on request and says so", async () => {
+    const gate = deferred<void>();
+    const body = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const encoder = new TextEncoder();
+        controller.enqueue(encoder.encode('{"stage":"diagnose"}\n'));
+        await gate.promise;
+        controller.enqueue(encoder.encode(`${JSON.stringify({ result })}\n`));
+        controller.close();
+      },
+    });
+    vi.stubGlobal("fetch", route({ "/api/optimize": () => new Response(body) }));
+    await mount();
+    type(ORIGINAL);
+    run();
+    await screen.findByText("Reading your prompt");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel run" }));
+    expect(await screen.findByText("Run cancelled.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Optimize prompt" })).toBeTruthy();
+    await act(async () => gate.resolve());
   });
 
   it("uses no em dashes in any visible text", async () => {

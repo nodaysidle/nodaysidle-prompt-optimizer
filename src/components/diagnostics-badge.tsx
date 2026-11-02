@@ -5,19 +5,25 @@ import type { DiagnosticResult } from "@/lib/types";
 export function DiagnosticsPanel({
   diagnostics,
   loading,
+  disabled,
   onRefresh,
   onQuestion,
 }: {
   diagnostics: DiagnosticResult | null;
   loading?: boolean;
+  disabled?: boolean;
   onRefresh: () => void;
   onQuestion: (question: string) => void;
 }) {
   return (
     <section className="read" aria-label="Read of your draft">
       <div className="read-head">
-        <h2>Read of your draft</h2>
-        <button type="button" disabled={loading} onClick={onRefresh}>
+        <h3 className="read-title">Read of your draft</h3>
+        <button
+          type="button"
+          disabled={loading || disabled}
+          onClick={onRefresh}
+        >
           {loading ? "Reading" : "Read again"}
         </button>
       </div>
@@ -30,7 +36,9 @@ export function DiagnosticsPanel({
                   ? "Rule-based estimate, no model was consulted."
                   : `Judged by ${diagnostics.engine ?? "the diagnostic model"}.`
               }`
-            : "Type a draft and it is read here. Short, clear prompts are valid and may need nothing."}
+            : disabled
+              ? "Nothing to read until you type a draft."
+              : "Press Read again. Short, clear prompts are valid and may need nothing."}
       </p>
       {diagnostics && diagnostics.issues.length > 0 && (
         <ul className="read-list">

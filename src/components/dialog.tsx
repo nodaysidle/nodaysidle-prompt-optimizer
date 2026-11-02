@@ -3,10 +3,16 @@ import { useEffect, useId, useRef } from "react";
 export function Dialog({
   title,
   onClose,
+  beforeClose,
+  footer,
   children,
 }: {
   title: string;
   onClose: () => void;
+  /** Optional guard for Close and Escape. Returning false keeps the dialog open. */
+  beforeClose?: () => boolean;
+  /** Kept outside the scrolling body so Save never scrolls away. */
+  footer?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -23,6 +29,10 @@ export function Dialog({
       focused?.focus();
     };
   }, []);
+  function requestClose() {
+    if (beforeClose && !beforeClose()) return;
+    onClose();
+  }
   return (
     <dialog
       ref={ref}
@@ -31,7 +41,7 @@ export function Dialog({
       className="workbench-dialog"
       onCancel={(event) => {
         event.preventDefault();
-        onClose();
+        requestClose();
       }}
       onKeyDown={(event) => {
         if (event.key !== "Tab") return;
@@ -62,11 +72,12 @@ export function Dialog({
     >
       <div className="dialog-heading">
         <h2 id={id}>{title}</h2>
-        <button type="button" onClick={onClose} aria-label={`Close ${title}`}>
+        <button type="button" onClick={requestClose} aria-label={`Close ${title}`}>
           Close
         </button>
       </div>
-      {children}
+      <div className="dialog-body">{children}</div>
+      {footer && <div className="dialog-footer">{footer}</div>}
     </dialog>
   );
 }

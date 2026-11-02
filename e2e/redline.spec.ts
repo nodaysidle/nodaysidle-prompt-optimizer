@@ -98,13 +98,72 @@ test.describe("the redline flow", () => {
     await expect(page.getByRole("button", { name: "Run again" })).toBeVisible();
   });
 
-  test("without a key the run is blocked and Settings is one click away", async ({ page }) => {
+  test("without a key the run offers the fix and opens Settings", async ({ page }) => {
     await mock(page, { keyed: false });
     await page.goto("/");
     await draft(page).fill(ORIGINAL);
-    await expect(page.getByRole("button", { name: "Optimize prompt" })).toBeDisabled();
-    await page.getByRole("button", { name: "Open Settings" }).click();
+    const fix = page.getByRole("button", { name: "Add a key to start" });
+    await expect(fix).toBeEnabled();
+    await fix.click();
     await expect(page.getByRole("dialog")).toBeVisible();
+    await expect(page.getByLabel("DeepSeek API key")).toBeFocused();
+  });
+
+  test("the primary action is fully visible at 1366x768", async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await mock(page, { keyed: false });
+    await page.goto("/");
+    const box = await page.getByRole("button", { name: "Add a key to start" }).boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.y + box!.height).toBeLessThanOrEqual(768);
+  });
+
+  test("settings: key first, Save in view, and saving unblocks the run", async ({ page }) => {
+    await mock(page, { keyed: false });
+    await page.goto("/");
+    await page.getByRole("button", { name: "Add a key to start" }).click();
+    await expect(page.getByLabel("DeepSeek API key")).toBeFocused();
+    const save = page.getByRole("button", { name: "Save settings" });
+    const box = await save.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.y + box!.height).toBeLessThanOrEqual(900);
+    await page.getByLabel("DeepSeek API key").fill("sk-fixture-only");
+    await save.click();
+    await expect(page.getByRole("dialog").getByRole("status")).toContainText("Saved");
+    await page.getByRole("button", { name: "Close Settings" }).click();
+    await draft(page).fill(ORIGINAL);
+    await expect(page.getByRole("button", { name: "Optimize prompt" })).toBeEnabled();
+  });
+
+  test("image prompt: the likeness lock is 44px and edits the draft", async ({ page }) => {
+    await mock(page);
+    await page.goto("/");
+    await page.getByRole("button", { name: "Image prompt" }).click();
+    const lock = page.getByRole("button", { name: "Lock subject likeness" });
+    const box = await lock.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+    await lock.click();
+    const on = page.getByRole("button", { name: "Likeness lock on" });
+    await expect(on).toHaveAttribute("aria-pressed", "true");
+    await expect(draft(page)).toHaveValue(/The subject in the photo/);
+    await on.click();
+    await expect(draft(page)).not.toHaveValue(/The subject in the photo/);
+  });
+
+  test("history uses human labels and confirms a clear inside the dialog", async ({ page }) => {
+    await mock(page);
+    await page.goto("/");
+    await runIt(page);
+    await page.getByRole("button", { name: "History", exact: true }).click();
+    await expect(page.getByText(/User prompt · Restructure · General/)).toBeVisible();
+    await page.getByRole("button", { name: "Clear history" }).click();
+    await expect(page.getByText("Delete all local history, including favorites?")).toBeVisible();
+    await page.getByRole("button", { name: "Keep history" }).click();
+    await expect(page.getByRole("button", { name: "Load saved prompt" })).toBeVisible();
+    await page.getByRole("button", { name: "Clear history" }).click();
+    await page.getByRole("button", { name: "Delete everything" }).click();
+    await expect(page.getByText("No saved prompts yet.")).toBeVisible();
   });
 });
 

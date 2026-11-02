@@ -12,8 +12,8 @@ The tokens and the voice are the studio's own, taken from the published apps sit
 
 The optimizer returns edits to your own words, not a replacement you have to trust. Your prompt stays in view. Each change is a block you keep or revert. The final prompt is built from the edits you keep, and stays editable.
 
-- Red is the markup color. It marks what was removed (a red strike) and what changed. It appears nowhere else except the hover state of the main action. One accent, used at the moment it carries information.
-- Start lights are the progress indicator. Five lamps come on as the server reports each real stage (request sent, diagnosing, rewriting, checking, ready). They go out when the result lands. They never run on a timer, so they never claim progress that did not happen.
+- Red is the markup and progress color. It marks what was removed (a red strike) and lights the start lamps. It never fills a control: the primary inverts to an ink outline on hover. One accent, used at the moment it carries information.
+- Start lights are the progress indicator. Five lamps come on as the server reports each real stage (request sent, reading, rewriting, checking, second pass). They go out when the result lands. They never run on a timer, so they never claim progress that did not happen.
 - Verdicts are plain words: Checked, Needs your review, Original kept, Not independently checked. No invented scores.
 
 ## Decisions and the reason for each (R-31)
@@ -21,7 +21,7 @@ The optimizer returns edits to your own words, not a replacement you have to tru
 | Decision | Reason |
 |---|---|
 | Black `#050505`, ink `#f2f2f2` | Studio identity. Long editing sessions favour low glare. Dark is the brand, not a trend. |
-| One accent, red `#e10600` | The studio's single accent. Used for markup only. 4.10:1 on black, so it is never small text. |
+| One accent, red `#e10600` | The studio's single accent. Used for markup and the start lamps only. 4.10:1 on black, so it is never small text. |
 | `#ff6b63` for small red text | `#e10600` fails 4.5:1 for small text. `#ff6b63` is 7.31:1 on `#050505`. |
 | Control edges `#6e6e6e` | 4.00:1 on `#050505`, above the 3:1 non-text bar. `#262626` is decorative rules only. |
 | Saira Condensed for display | Studio display face, motorsport timing-screen character. Used for the wordmark and section titles only. |
@@ -34,6 +34,15 @@ The optimizer returns edits to your own words, not a replacement you have to tru
 | Keep or revert per sentence or line | Word-level toggles produce broken grammar. Sentence or line chunks keep each choice meaningful. |
 | Reasons shown as a summary, not per edit | The model's change list is not aligned to individual edits. Mapping them would invent a link. |
 | Motion: hover and focus only, plus the lamps | Lamps change state on real stage events. No loops, no entrance animation. |
+| The first screen is the editor, not a hero | The tool has one job. The run row sits with the draft and is fully visible at 1366x768. |
+| The blocked primary opens Settings | A disabled button is a dead end. The first click is the fix, not a link at the fold. |
+| Settings puts the key first and Save in a fixed footer | The setup path is what a new user needs; Save must never scroll away. The body scrolls, the header and footer do not. |
+| The draft read and a labelled example fill the result column before a run | The column is the space the result will take. It shows the product and the one feature that works without a key. |
+| Red never fills a control | Red means removed text or a lit lamp. The primary inverts to an ink outline on hover. |
+| One primary per state | After a result, Copy final prompt is the action; the run becomes Run again. |
+| The likeness lock is a standard 44px ink toggle | It is a control, not a badge, and it edits the draft, so it stays with the draft label. |
+| Human labels in history | Prompt kind, mode and target are words, not internal enums or profile versions. |
+| Two rows on a phone header | Brand and actions share the first row; the tool name sits under it. Below 380px it stacks. |
 
 ## Rules held
 

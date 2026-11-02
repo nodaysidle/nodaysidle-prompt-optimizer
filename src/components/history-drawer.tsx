@@ -6,6 +6,8 @@ import {
   deleteHistoryItem,
   toggleFavoriteHistoryItem,
 } from "@/lib/storage";
+import { KIND_LABEL, MODE_LABEL } from "@/lib/labels";
+import { PROFILES } from "@/lib/profiles";
 import { Dialog } from "./dialog";
 interface Props {
   open: boolean;
@@ -22,6 +24,8 @@ function HistoryContent({
   const [search, setSearch] = useState("");
   const [favorites, setFavorites] = useState(false);
   const [error, setError] = useState("");
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   function action(fn: () => unknown) {
     try {
       fn();
@@ -43,72 +47,123 @@ function HistoryContent({
   return (
     <>
       <p className="help">
-        Saved locally on this browser. Favorites are protected from rolling
-        recent-history eviction. Restored checks are historical, not fresh
-        verification.
+        Saved locally on this browser. Favorites survive recent-history
+        eviction. A loaded run keeps the check it had when it ran.
       </p>
-      <label htmlFor="history-search">Search history</label>
-      <input
-        id="history-search"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-      />
-      <div className="action-row">
-        <button
-          aria-pressed={favorites}
-          onClick={() => setFavorites(!favorites)}
-        >
-          Favorites only
-        </button>
-        <button
-          disabled={!items.length}
-          onClick={() => {
-            if (confirm("Delete all local history including favorites?"))
-              action(clearHistory);
-          }}
-        >
-          Clear history
-        </button>
-      </div>
-      {error && <p role="alert">{error}</p>}
-      {!filtered.length && <p>No matching saved prompts.</p>}
-      {filtered.map((item) => (
-        <article className="history-item" key={item.id}>
+
+      {!items.length ? (
+        <div className="history-empty">
+          <p>No saved prompts yet.</p>
           <p className="help">
-            {item.kind} · {item.mode} · {item.profileVersion} ·{" "}
-            {new Date(item.createdAt).toLocaleString()}
+            Each run you make is saved here, with its original prompt and the
+            final text. Favorites are kept when older runs are evicted.
           </p>
-          <p>{item.optimized}</p>
+        </div>
+      ) : (
+        <>
+          <label htmlFor="history-search">Search history</label>
+          <input
+            id="history-search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
           <div className="action-row">
-            <button onClick={() => onSelectPrompt(item)}>
-              Load saved prompt
+            <button
+              aria-pressed={favorites}
+              onClick={() => setFavorites(!favorites)}
+            >
+              Favorites only
             </button>
             <button
-              aria-pressed={item.isFavorite}
-              onClick={() => action(() => toggleFavoriteHistoryItem(item.id))}
+              onClick={() => setConfirmClear(true)}
+              disabled={confirmClear}
             >
-              {item.isFavorite ? "Unfavorite" : "Favorite"}
-            </button>
-            <button onClick={() => action(() => deleteHistoryItem(item.id))}>
-              Delete
-            </button>
-            <button
-              onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(item.optimized);
-                  setError("Copied saved candidate.");
-                } catch {
-                  setError(
-                    "Clipboard unavailable. Select and copy the text manually.",
-                  );
-                }
-              }}
-            >
-              Copy saved candidate
+              Clear history
             </button>
           </div>
-        </article>
-      ))}
+
+          {confirmClear && (
+            <div className="history-confirm" role="alert">
+              <p>Delete all local history, including favorites?</p>
+              <div className="action-row">
+                <button
+                  type="button"
+                  onClick={() => {
+                    action(clearHistory);
+                    setConfirmClear(false);
+                  }}
+                >
+                  Delete everything
+                </button>
+                <button type="button" onClick={() => setConfirmClear(false)}>
+                  Keep history
+                </button>
+              </div>
+            </div>
+          )}
+
+          {error && <p role="alert">{error}</p>}
+
+          {!filtered.length ? (
+            <div className="history-empty">
+              <p>No saved prompts match this view.</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  setFavorites(false);
+                }}
+              >
+                Show all saved prompts
+              </button>
+            </div>
+          ) : (
+            filtered.map((item) => (
+              <article className="history-item" key={item.id}>
+                <p className="help">
+                  {KIND_LABEL[item.kind]} · {MODE_LABEL[item.mode]} ·{" "}
+                  {PROFILES[item.engineTarget].label} ·{" "}
+                  {new Date(item.createdAt).toLocaleString()}
+                </p>
+                <p className="history-preview">{item.optimized}</p>
+                <div className="action-row">
+                  <button onClick={() => onSelectPrompt(item)}>
+                    Load saved prompt
+                  </button>
+                  <button
+                    aria-pressed={item.isFavorite}
+                    onClick={() =>
+                      action(() => toggleFavoriteHistoryItem(item.id))
+                    }
+                  >
+                    {item.isFavorite ? "Unfavorite" : "Favorite"}
+                  </button>
+                  <button
+                    onClick={() => action(() => deleteHistoryItem(item.id))}
+                  >
+                    Delete
+                  </button>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(item.optimized);
+                        setCopiedId(item.id);
+                        window.setTimeout(() => setCopiedId(null), 1600);
+                      } catch {
+                        setError(
+                          "Clipboard unavailable. Select and copy the text manually.",
+                        );
+                      }
+                    }}
+                  >
+                    {copiedId === item.id ? "Copied" : "Copy saved candidate"}
+                  </button>
+                </div>
+              </article>
+            ))
+          )}
+        </>
+      )}
     </>
   );
 }

@@ -15,9 +15,9 @@ import {
 } from "@/lib/types";
 import { PROFILES } from "@/lib/profiles";
 import { PROMPT_EXAMPLES } from "@/lib/examples";
+import { KIND_LABEL, KIND_SHORT, MODE_LABEL } from "@/lib/labels";
 import { loadHistory, saveHistoryItem } from "@/lib/storage";
 import {
-  addReferencePhotoInstruction,
   composePresets,
   parsePresets,
   toggleReferencePhotoInstruction,
@@ -36,6 +36,7 @@ import { DiagnosticsPanel } from "./diagnostics-badge";
 import { RedlineView } from "./redline-view";
 import { ResultNotes } from "./result-notes";
 import { RunLights, type RunStage } from "./run-lights";
+import { SampleRedline } from "./sample-redline";
 import { TestModal } from "./test-modal";
 
 interface Candidate {
@@ -69,22 +70,11 @@ const EMPTY_DRAFT: Draft = {
   engineTarget: "universal",
 };
 
-const KIND_LABEL: Record<PromptKind, string> = {
-  user: "User prompt",
-  system: "System prompt",
-  image: "Image prompt",
-  video: "Video prompt",
-};
 const KIND_HINT: Record<PromptKind, string> = {
   user: "A question or task for ChatGPT, Claude, Cursor or a similar assistant.",
   system: "Rules and persona that govern an AI agent.",
   image: "A still picture, for Nano Banana or ChatGPT Images.",
   video: "A shot, for Veo 3.1 or Gemini Omni.",
-};
-const MODE_LABEL: Record<OptimizationMode, string> = {
-  minimal: "Light edit",
-  structured: "Restructure",
-  creative: "Allow additions",
 };
 const MODE_HINT: Record<OptimizationMode, string> = {
   minimal: "The smallest useful edit. No invented context or extra requirements.",
@@ -190,10 +180,13 @@ export function PromptWorkspace() {
   const [testDraft, setTestDraft] = useState(false);
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
+  const [copied, setCopied] = useState<string | null>(null);
+  const [historyNotice, setHistoryNotice] = useState("");
   const { ratio, lens } = parsePresets(draft.prompt);
   const diagnosticController = useRef<AbortController | null>(null);
   const diagnosticTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const optimizeController = useRef<AbortController | null>(null);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const diagnosticId = useRef(0);
   const optimizeId = useRef(0);
   const textarea = useRef<HTMLTextAreaElement | null>(null);
@@ -209,6 +202,7 @@ export function PromptWorkspace() {
     diagnosticState.key === contextKey ? diagnosticState.data : null;
   const diagnosing = diagnosingKey === contextKey;
   const visual = draft.kind === "image" || draft.kind === "video";
+  const likenessLocked = visual && isSubjectInPhotoPrompt(draft.prompt);
   const canRun = Boolean(
     settings.deepseekApiKey ||
       settings.openrouterApiKey ||
@@ -246,6 +240,7 @@ export function PromptWorkspace() {
     setDiagnosingKey(null);
     setDiagnosticState({ data: null, key: "" });
     setTestOpen(false);
+    if (running) setNotice("Run cancelled.");
   }
   function changeDraft(next: Draft, replacement = false, clearResult = false) {
     cancel();
@@ -267,6 +262,7 @@ export function PromptWorkspace() {
     return () => {
       diagnosticController.current?.abort();
       optimizeController.current?.abort();
+      if (copyTimer.current) clearTimeout(copyTimer.current);
     };
   }, []);
   useEffect(() => {
@@ -274,11 +270,13 @@ export function PromptWorkspace() {
     diagnosticController.current?.abort();
     optimizeId.current++;
     optimizeController.current?.abort();
-    if (!settings.autoDiagnose || !draft.prompt.trim()) return;
+    if (!settings.autoDiagnose || !draft.prompt.trim()) {
+      return;
+    }
     const controller = new AbortController();
     diagnosticController.current = controller;
+    const pending = setTimeout(() => setDiagnosingKey(contextKey), 0);
     const timer = setTimeout(async () => {
-      setDiagnosingKey(contextKey);
       try {
         const data = await requestDiagnostics(draft, settings, controller.signal);
         if (diagnosticId.current === id && !controller.signal.aborted)
@@ -289,9 +287,10 @@ export function PromptWorkspace() {
       } finally {
         if (diagnosticId.current === id) setDiagnosingKey(null);
       }
-    }, 600);
+    }, 1000);
     diagnosticTimer.current = timer;
     return () => {
+      clearTimeout(pending);
       clearTimeout(timer);
       controller.abort();
     };
@@ -333,6 +332,7 @@ export function PromptWorkspace() {
     setStage("sent");
     setFailure(null);
     setNotice("");
+    setHistoryNotice("");
     setTestOpen(false);
     try {
       const response = await fetch("/api/optimize", {
@@ -358,7 +358,7 @@ export function PromptWorkspace() {
         saveHistoryItem({ ...result, ...frozen, original: frozen.prompt });
         refreshHistory();
       } catch {
-        setNotice(
+        setHistoryNotice(
           "The result is ready, but it could not be saved to history. Browser storage may be full or disabled.",
         );
       }
@@ -377,12 +377,19 @@ export function PromptWorkspace() {
     }
   }
 
-  async function copy(value: string) {
+  function flash(key: string) {
+    setCopied(key);
+    if (copyTimer.current) clearTimeout(copyTimer.current);
+    copyTimer.current = setTimeout(() => setCopied(null), 1600);
+  }
+  async function copy(value: string, key: string): Promise<boolean> {
     try {
       await navigator.clipboard.writeText(value);
-      setNotice("Copied.");
+      flash(key);
+      return true;
     } catch {
-      setFailure({ message: "The clipboard is unavailable. Select the text and copy it by hand." });
+      setNotice("The clipboard is unavailable. Select the text and copy it by hand.");
+      return false;
     }
   }
   function toggleEdit(id: number) {
@@ -432,8 +439,8 @@ export function PromptWorkspace() {
         <div className="brand">
           <BrandMark className="brand-mark" />
           <span className="brand-name">NODAYSIDLE</span>
-          <h1 className="brand-tool">Prompt Optimizer</h1>
         </div>
+        <h1 className="brand-tool">Prompt Optimizer</h1>
         <nav aria-label="Optimizer">
           <button
             type="button"
@@ -456,17 +463,18 @@ export function PromptWorkspace() {
 
           <fieldset className="choice">
             <legend>Prompt type</legend>
-            <div className="seg">
+            <div className="seg seg-kinds">
               {PROMPT_KINDS.map((kind) => (
                 <button
                   key={kind}
                   type="button"
+                  aria-label={KIND_LABEL[kind]}
                   aria-pressed={draft.kind === kind}
                   onClick={() =>
                     changeDraft({ ...draft, kind, mode: defaultMode(kind), engineTarget: "universal" })
                   }
                 >
-                  {KIND_LABEL[kind]}
+                  {KIND_SHORT[kind]}
                 </button>
               ))}
             </div>
@@ -514,40 +522,31 @@ export function PromptWorkspace() {
 
           <div className="choice">
             <div className="pane-heading">
-              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+              <div className="draft-head">
                 <label htmlFor="draft">Draft</label>
                 {visual && (
                   <button
                     type="button"
-                    aria-pressed={isSubjectInPhotoPrompt(draft.prompt)}
-                    style={{
-                      minHeight: "2rem",
-                      padding: "0.25rem 0.75rem",
-                      fontSize: "0.8125rem",
-                      fontWeight: 600,
-                      letterSpacing: "0.02em",
-                      borderColor: isSubjectInPhotoPrompt(draft.prompt) ? "var(--red, #e10600)" : "var(--edge)",
-                      color: isSubjectInPhotoPrompt(draft.prompt) ? "var(--red-small, #ff6b63)" : "var(--ink)",
-                      backgroundColor: isSubjectInPhotoPrompt(draft.prompt) ? "rgba(225, 6, 0, 0.12)" : "transparent",
-                    }}
+                    className="lock"
+                    aria-pressed={likenessLocked}
                     onClick={() => {
                       const prompt = toggleReferencePhotoInstruction(draft.prompt);
                       changeDraft({ ...draft, prompt }, true);
                     }}
                   >
-                    {isSubjectInPhotoPrompt(draft.prompt)
-                      ? "Reference Photo Lock active"
-                      : "+ Reference Photo Lock"}
+                    {likenessLocked ? "Likeness lock on" : "Lock subject likeness"}
                   </button>
                 )}
               </div>
-              <span className="help">{draft.prompt.length} of 20000 characters</span>
+              <span className="help">
+                {draft.prompt.length.toLocaleString("en-US")} / 20,000 characters
+              </span>
             </div>
             <textarea
               ref={textarea}
               id="draft"
               className="prompt-text"
-              rows={12}
+              rows={8}
               maxLength={20000}
               value={draft.prompt}
               aria-describedby="draft-help"
@@ -562,26 +561,39 @@ export function PromptWorkspace() {
             <p className="help" id="draft-help">
               Paste what you have. Ctrl+Enter runs it.
             </p>
+            {likenessLocked && (
+              <p className="help" role="note">
+                The draft now asks for the subject to be kept. It is a request,
+                not a guarantee, and no photo is sent from this app.
+              </p>
+            )}
           </div>
 
           <div className="run">
             <button
               type="button"
-              className="primary"
-              disabled={running || !draft.prompt.trim() || !canRun}
-              onClick={optimize}
+              className={candidate ? undefined : "primary"}
+              disabled={running || (canRun && !draft.prompt.trim())}
+              onClick={canRun ? optimize : () => setSettingsOpen(true)}
             >
-              {running ? "Optimizing" : "Optimize prompt"}
+              {running
+                ? "Optimizing"
+                : !canRun
+                  ? "Add a key to start"
+                  : candidate
+                    ? "Run again"
+                    : "Optimize prompt"}
             </button>
+            {running && (
+              <button type="button" onClick={cancel}>
+                Cancel run
+              </button>
+            )}
             <RunLights stage={stage} />
           </div>
           {!canRun && (
-            <p className="help" role="note">
-              Add a DeepSeek or OpenRouter key to run the optimizer. Keys stay in this
-              tab unless you choose to remember them.{" "}
-              <button type="button" className="link" onClick={() => setSettingsOpen(true)}>
-                Open Settings
-              </button>
+            <p className="run-note" role="note">
+              Keys stay in this tab unless you choose to remember them.
             </p>
           )}
 
@@ -593,8 +605,12 @@ export function PromptWorkspace() {
             >
               Clear draft
             </button>
-            <button type="button" disabled={!draft.prompt} onClick={() => copy(draft.prompt)}>
-              Copy draft
+            <button
+              type="button"
+              disabled={!draft.prompt}
+              onClick={() => copy(draft.prompt, "draft")}
+            >
+              {copied === "draft" ? "Copied" : "Copy draft"}
             </button>
             <button
               type="button"
@@ -620,6 +636,9 @@ export function PromptWorkspace() {
               Test the draft
             </button>
           </div>
+          <p className="feedback" role="status" aria-live="polite">
+            {notice || settingsError}
+          </p>
 
           <details>
             <summary>Examples and visual options</summary>
@@ -699,56 +718,14 @@ export function PromptWorkspace() {
                     <option key={value}>{value}</option>
                   ))}
                 </select>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const prompt = addReferencePhotoInstruction(draft.prompt);
-                    if (prompt !== draft.prompt) changeDraft({ ...draft, prompt }, true);
-                  }}
-                >
-                  Add reference-photo line
-                </button>
                 <p className="help">
-                  The line asks for the likeness to be kept. It is not a guarantee, and no
+                  The likeness lock adds one line to the draft asking for the
+                  subject to be kept. It is a request, not a guarantee, and no
                   photo is sent from this app.
                 </p>
               </>
             )}
           </details>
-
-          <DiagnosticsPanel
-            diagnostics={diagnostics}
-            loading={diagnosing}
-            onRefresh={diagnose}
-            onQuestion={(value) => {
-              setQuestion(value);
-              setAnswer("");
-            }}
-          />
-          {question && (
-            <section className="question-answer">
-              <label htmlFor="context-answer">{question}</label>
-              <textarea
-                id="context-answer"
-                value={answer}
-                onChange={(e) => setAnswer(e.target.value)}
-                maxLength={2000}
-              />
-              <button
-                type="button"
-                disabled={!answer.trim() || draft.prompt.length + answer.length + 12 > 20000}
-                onClick={() => {
-                  changeDraft(
-                    { ...draft, prompt: `${draft.prompt}\n\nContext: ${answer.trim()}` },
-                    true,
-                  );
-                  textarea.current?.focus();
-                }}
-              >
-                Add my answer to the draft
-              </button>
-            </section>
-          )}
         </section>
 
         <section className="column" aria-label="Redline">
@@ -756,9 +733,11 @@ export function PromptWorkspace() {
             Redline
           </h2>
 
-          <p className="feedback" role="status" aria-live="polite">
-            {notice || settingsError}
-          </p>
+          {historyNotice && (
+            <p className="feedback" role="status">
+              {historyNotice}
+            </p>
+          )}
 
           {failure && (
             <div className="failure" role="alert">
@@ -775,20 +754,57 @@ export function PromptWorkspace() {
           )}
 
           {!candidate && !running && !failure && (
-            <div className="empty">
-              <p>
-                Run the optimizer and the result lands here as edits to your own words.
-                Keep the ones you want, revert the rest, then copy the final prompt.
-              </p>
-              <p className="help">
-                Short, clear prompts often come back unchanged. That is a valid result.
-              </p>
-            </div>
+            <>
+              <div className="empty">
+                <p>
+                  Run the optimizer and the result lands here as edits to your own words.
+                  Keep the ones you want, revert the rest, then copy the final prompt.
+                </p>
+                <p className="help">
+                  Short, clear prompts often come back unchanged. That is a valid result.
+                </p>
+              </div>
+              <DiagnosticsPanel
+                diagnostics={diagnostics}
+                loading={diagnosing}
+                disabled={!draft.prompt.trim()}
+                onRefresh={diagnose}
+                onQuestion={(value) => {
+                  setQuestion(value);
+                  setAnswer("");
+                }}
+              />
+              {question && (
+                <section className="question-answer">
+                  <label htmlFor="context-answer">{question}</label>
+                  <textarea
+                    id="context-answer"
+                    value={answer}
+                    onChange={(e) => setAnswer(e.target.value)}
+                    maxLength={2000}
+                  />
+                  <button
+                    type="button"
+                    disabled={!answer.trim() || draft.prompt.length + answer.length + 12 > 20000}
+                    onClick={() => {
+                      changeDraft(
+                        { ...draft, prompt: `${draft.prompt}\n\nContext: ${answer.trim()}` },
+                        true,
+                      );
+                      textarea.current?.focus();
+                    }}
+                  >
+                    Add my answer to the draft
+                  </button>
+                </section>
+              )}
+              <SampleRedline />
+            </>
           )}
 
           {running && !candidate && (
             <div className="empty">
-              <p>Working on it. Edit or clear the draft to cancel.</p>
+              <p>Working on it. Cancel or edit the draft to stop.</p>
             </div>
           )}
 
@@ -880,8 +896,12 @@ export function PromptWorkspace() {
                   </div>
                 )}
                 <div className="action-row">
-                  <button type="button" className="primary" onClick={() => copy(finalText)}>
-                    Copy final prompt
+                  <button
+                    type="button"
+                    className="primary"
+                    onClick={() => copy(finalText, "final")}
+                  >
+                    {copied === "final" ? "Copied" : "Copy final prompt"}
                   </button>
                   <button
                     type="button"
@@ -897,10 +917,11 @@ export function PromptWorkspace() {
                         },
                         true,
                       );
+                      flash("next");
                       setNotice("The final prompt is now the draft. Undo replacement is available.");
                     }}
                   >
-                    Use as next draft
+                    {copied === "next" ? "Used as draft" : "Use as next draft"}
                   </button>
                   {candidate.hand !== null && (
                     <button type="button" onClick={() => setCandidate({ ...candidate, hand: null })}>
@@ -924,7 +945,11 @@ export function PromptWorkspace() {
                 </div>
               </div>
 
-              <ResultNotes result={candidate.result} snapshot={candidate.snapshot} onCopy={copy} />
+              <ResultNotes
+                result={candidate.result}
+                snapshot={candidate.snapshot}
+                onCopy={(value) => copy(value, "negative")}
+              />
             </>
           )}
         </section>
@@ -932,7 +957,11 @@ export function PromptWorkspace() {
 
       <footer className="foot">
         <span>NODAYSIDLE</span>
-        <span>Your prompt goes to the provider you chose, through this app&rsquo;s server. Keys and history stay in this browser.</span>
+        <span>
+          Your prompt goes to the provider you chose, through this app&rsquo;s
+          server. Keys are not stored on the server, and history stays in this
+          browser.
+        </span>
       </footer>
 
       <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />

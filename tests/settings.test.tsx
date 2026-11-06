@@ -22,6 +22,12 @@ beforeEach(() => {
         sharedAccess: false,
         deepseek: false,
         openrouter: false,
+        decisions: {
+          typesafe: false,
+          mouse: false,
+          decision1: false,
+          order: ["typesafe", "mouse", "decision1"],
+        },
       }),
     ),
   );

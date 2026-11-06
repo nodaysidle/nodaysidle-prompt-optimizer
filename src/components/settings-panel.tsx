@@ -6,6 +6,8 @@ import {
   DEFAULT_SETTINGS,
   MODELS,
   type AppSettings,
+  type DecisionBackendName,
+  type ServerConfig,
 } from "@/lib/types";
 import { MODEL_SOURCE } from "@/lib/profiles";
 import { Dialog } from "./dialog";
@@ -199,6 +201,53 @@ function useSettingsForm({
 }
 type SettingsForm = ReturnType<typeof useSettingsForm>;
 
+const JUDGE_LABEL: Record<DecisionBackendName, string> = {
+  typesafe: "TypeSafe Jev",
+  mouse: "Mouse-1",
+  decision1: "Microsoft Decision-1",
+};
+
+/** What will judge the next run, before the user spends a rewrite. */
+function JudgeStatus({
+  server,
+  draft,
+}: {
+  server: ServerConfig | null;
+  draft: AppSettings;
+}) {
+  const decisions = server?.decisions;
+  const order = decisions?.order ?? [];
+  const configured = decisions
+    ? order.filter((name) => decisions[name])
+    : [];
+  const parts: string[] = [];
+  if (server === null) {
+    parts.push("Server status unavailable.");
+  } else if (configured.length) {
+    parts.push(
+      `Server, with a valid owner token: ${configured
+        .map((name) => JUDGE_LABEL[name])
+        .join(" -> ")}`,
+    );
+  } else {
+    parts.push("No server judge key is configured.");
+  }
+  if (draft.openrouterApiKey.trim()) {
+    parts.push("Your OpenRouter key: Microsoft Decision-1");
+  }
+  if (!configured.length && !draft.openrouterApiKey.trim()) {
+    parts.push(
+      "With neither, the draft read is rule-based and rewrites are not independently checked.",
+    );
+  }
+  return (
+    <p className="help">
+      Judge before a run: {parts.join(". ")}. The first configured backend that
+      answers is used, so a missing one falls through instead of failing the run.
+    </p>
+  );
+}
+
 function SettingsFields({ form }: { form: SettingsForm }) {
   const {
     draft,
@@ -229,6 +278,15 @@ function SettingsFields({ form }: { form: SettingsForm }) {
           kept, bloat, and whether the rewrite is better. The server tries
           TypeSafe, then Mouse-1, then Decision-1. With none of them, the draft
           read is rule-based and rewrites are not independently checked.
+        </p>
+      </section>
+
+      <section className="settings-section" aria-label="Judge models">
+        <h3>Judge models</h3>
+        <JudgeStatus server={server} draft={draft} />
+        <p className="help">
+          The server order is set by DECISION_ORDER. Default: TypeSafe Jev,
+          Mouse-1, Microsoft Decision-1.
         </p>
       </section>
 

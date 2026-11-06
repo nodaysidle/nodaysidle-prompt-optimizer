@@ -1,6 +1,7 @@
 import { runDiagnostics } from "@/lib/decisions";
 import { validateDomain } from "@/lib/validation";
 import {
+  resolveDecisionOrder,
   resolveOptionalMouseKey,
   resolveOptionalOpenrouterKey,
   resolveOptionalTypesafeKey,
@@ -17,6 +18,7 @@ export async function POST(req: Request) {
         typesafeKey: resolveOptionalTypesafeKey(req),
         mouseKey: resolveOptionalMouseKey(req),
         openrouterKey: resolveOptionalOpenrouterKey(req),
+        order: resolveDecisionOrder(),
         signal: req.signal,
       }),
       { headers: { "Cache-Control": "no-store" } },

@@ -2,6 +2,7 @@ import { optimizePrompt, type Stage } from "@/lib/providers/chat";
 import { validateDomain } from "@/lib/validation";
 import {
   resolveChatKeys,
+  resolveDecisionOrder,
   resolveOptionalMouseKey,
   resolveOptionalTypesafeKey,
 } from "@/lib/server/access";
@@ -30,6 +31,7 @@ export async function POST(req: Request) {
         openrouterApiKey: keys.openrouterApiKey,
         typesafeApiKey,
         mouseApiKey,
+        decisionOrder: resolveDecisionOrder(),
         signal: req.signal,
         onStage,
       });

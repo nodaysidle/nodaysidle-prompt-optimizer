@@ -1,4 +1,10 @@
-import type { DiagnosticResult, OptimizationMode, QualityGateResult, PromptKind } from "./types";
+import type {
+  DecisionBackendName,
+  DiagnosticResult,
+  OptimizationMode,
+  PromptKind,
+  QualityGateResult,
+} from "./types";
 import { DEFECT_TAGS, DEFECT_TAG_LIST, type DefectTag } from "./defects";
 import { GATE_BY_MODE } from "./gate";
 
@@ -8,6 +14,8 @@ export interface DiagnoseParams {
   typesafeKey?: string;
   mouseKey?: string;
   openrouterKey?: string;
+  /** Judge order selected by the server. Missing names are appended in the default order. */
+  order?: DecisionBackendName[];
   signal?: AbortSignal;
 }
 
@@ -18,6 +26,8 @@ export interface QualityGateParams {
   typesafeKey?: string;
   mouseKey?: string;
   openrouterKey?: string;
+  /** Judge order selected by the server. Missing names are appended in the default order. */
+  order?: DecisionBackendName[];
   signal?: AbortSignal;
 }
 
@@ -245,46 +255,91 @@ const MOUSE_MODEL = "mouse-1";
 const OPENROUTER_DECISIONS_URL = "https://openrouter.ai/api/alpha/decisions";
 const DECISION1_MODEL = "microsoft/microsoft-decision-1";
 
+export const DEFAULT_DECISION_ORDER: DecisionBackendName[] = [
+  "typesafe",
+  "mouse",
+  "decision1",
+];
+
+const DECISION_ALIASES: Record<string, DecisionBackendName> = {
+  typesafe: "typesafe",
+  mouse: "mouse",
+  decision1: "decision1",
+  "decision-1": "decision1",
+  openrouter: "decision1",
+};
+
 /**
- * Backends in the order they are tried. TypeSafe is the calibrated System One
- * judge, Mouse is the fast hot-path fallback, and Decision-1 on OpenRouter is the
- * cross-engine fallback. A backend that errors or returns an invalid answer is
- * skipped; a cancelled request is never retried on the next one.
+ * Reads a comma-separated judge order such as `mouse,typesafe,decision1`.
+ * Unknown names are ignored, duplicates collapse, and every backend the caller
+ * did not name is appended in the default order so a typo never disables the gate.
+ */
+export function parseDecisionOrder(value: string | undefined): DecisionBackendName[] {
+  const requested = (value ?? "")
+    .split(",")
+    .map((name) => DECISION_ALIASES[name.trim().toLowerCase()])
+    .filter((name): name is DecisionBackendName => Boolean(name));
+  const unique = [...new Set(requested)];
+  return [...unique, ...DEFAULT_DECISION_ORDER.filter((name) => !unique.includes(name))];
+}
+
+function backendFor(
+  name: DecisionBackendName,
+  keys: { typesafe?: string; mouse?: string; openrouter?: string },
+): DecisionBackend | undefined {
+  if (name === "typesafe") {
+    const apiKey = keys.typesafe?.trim();
+    return apiKey
+      ? {
+          url: TYPESAFE_URL,
+          model: TYPESAFE_MODEL,
+          judge: "TypeSafe-Jev",
+          apiKey,
+          timeout: 4000,
+        }
+      : undefined;
+  }
+  if (name === "mouse") {
+    const apiKey = keys.mouse?.trim();
+    return apiKey
+      ? {
+          url: MOUSE_URL,
+          model: MOUSE_MODEL,
+          judge: "Mouse-1",
+          apiKey,
+          timeout: 3000,
+        }
+      : undefined;
+  }
+  const apiKey = keys.openrouter?.trim();
+  return apiKey
+    ? {
+        url: OPENROUTER_DECISIONS_URL,
+        model: DECISION1_MODEL,
+        judge: "Microsoft-Decision-1",
+        apiKey,
+        timeout: 6000,
+      }
+    : undefined;
+}
+
+/**
+ * Backends in the requested order. TypeSafe is the calibrated System One judge,
+ * Mouse is the fast hot-path fallback, and Decision-1 is the cross-engine
+ * fallback. A backend that errors or returns an invalid answer is skipped; a
+ * cancelled request is never retried on the next one.
  */
 function decisionBackends(
   typesafeKey?: string,
   mouseKey?: string,
   openrouterKey?: string,
+  order: DecisionBackendName[] = DEFAULT_DECISION_ORDER,
 ): DecisionBackend[] {
-  const backends: DecisionBackend[] = [];
-  const tsKey = typesafeKey?.trim();
-  if (tsKey)
-    backends.push({
-      url: TYPESAFE_URL,
-      model: TYPESAFE_MODEL,
-      judge: "TypeSafe-Jev",
-      apiKey: tsKey,
-      timeout: 4000,
-    });
-  const mKey = mouseKey?.trim();
-  if (mKey)
-    backends.push({
-      url: MOUSE_URL,
-      model: MOUSE_MODEL,
-      judge: "Mouse-1",
-      apiKey: mKey,
-      timeout: 3000,
-    });
-  const orKey = openrouterKey?.trim();
-  if (orKey)
-    backends.push({
-      url: OPENROUTER_DECISIONS_URL,
-      model: DECISION1_MODEL,
-      judge: "Microsoft-Decision-1",
-      apiKey: orKey,
-      timeout: 6000,
-    });
-  return backends;
+  const keys = { typesafe: typesafeKey, mouse: mouseKey, openrouter: openrouterKey };
+  return order.flatMap((name) => {
+    const backend = backendFor(name, keys);
+    return backend ? [backend] : [];
+  });
 }
 
 async function callDecisions(
@@ -354,7 +409,12 @@ export async function runDiagnostics(
   const effectiveKind = params.kind || "user";
 
   // Keys are resolved by the route, which checks access; never read the server's key here.
-  const backends = decisionBackends(params.typesafeKey, params.mouseKey, params.openrouterKey);
+  const backends = decisionBackends(
+    params.typesafeKey,
+    params.mouseKey,
+    params.openrouterKey,
+    params.order,
+  );
 
   if (!backends.length) {
     return runHeuristicDiagnostics(params.prompt, effectiveKind);
@@ -388,7 +448,12 @@ export async function runQualityGate(
   params: QualityGateParams,
 ): Promise<QualityGateResult | undefined> {
   // Keys are resolved by the route, which checks access; never read the server's key here.
-  const backends = decisionBackends(params.typesafeKey, params.mouseKey, params.openrouterKey);
+  const backends = decisionBackends(
+    params.typesafeKey,
+    params.mouseKey,
+    params.openrouterKey,
+    params.order,
+  );
 
   if (!backends.length) return undefined;
 

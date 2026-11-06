@@ -114,28 +114,55 @@ describe("every owner-funded access boundary", () => {
       ),
     ).toBe("apikey_server");
     expect(Object.keys(serverConfig()).sort()).toEqual([
+      "decisions",
       "deepseek",
       "openrouter",
       "sharedAccess",
     ]);
   });
-  it("config exposes only booleans", () => {
-    expect(
-      Object.values(serverConfig()).every(
-        (value) => typeof value === "boolean",
-      ),
-    ).toBe(true);
-    expect(JSON.stringify(serverConfig())).not.toContain("server-");
-    expect(serverConfig()).toEqual({
+  it("config exposes availability booleans and the judge order", () => {
+    const config = serverConfig();
+    for (const key of ["sharedAccess", "deepseek", "openrouter"] as const) {
+      expect(typeof config[key]).toBe("boolean");
+    }
+    for (const key of ["typesafe", "mouse", "decision1"] as const) {
+      expect(typeof config.decisions[key]).toBe("boolean");
+    }
+    expect(Array.isArray(config.decisions.order)).toBe(true);
+    expect(JSON.stringify(config)).not.toContain("server-");
+    expect(config).toEqual({
       sharedAccess: true,
       deepseek: true,
       openrouter: true,
+      decisions: {
+        typesafe: false,
+        mouse: false,
+        decision1: true,
+        order: ["typesafe", "mouse", "decision1"],
+      },
     });
     vi.stubEnv("APP_ACCESS_TOKEN", "");
     expect(serverConfig()).toEqual({
       sharedAccess: false,
       deepseek: false,
       openrouter: false,
+      decisions: {
+        typesafe: false,
+        mouse: false,
+        decision1: false,
+        order: ["typesafe", "mouse", "decision1"],
+      },
+    });
+  });
+  it("reports the configured judge order and which server judges exist", () => {
+    vi.stubEnv("TYPESAFE_API_KEY", "server-typesafe");
+    vi.stubEnv("MOUSE_API_KEY", "server-mouse");
+    vi.stubEnv("DECISION_ORDER", "mouse,typesafe");
+    expect(serverConfig().decisions).toEqual({
+      typesafe: true,
+      mouse: true,
+      decision1: true,
+      order: ["mouse", "typesafe", "decision1"],
     });
   });
   it.each([optimize, testRun])(
@@ -735,6 +762,21 @@ describe("decisions: TypeSafe backend", () => {
     expect(result.heuristic).toBeFalsy();
   });
 
+  it("honours a requested judge order", async () => {
+    const fetch = vi.fn().mockResolvedValue(diagnosis());
+    vi.stubGlobal("fetch", fetch);
+    const result = await runDiagnostics({
+      prompt: "Translate hello into French.",
+      kind: "user",
+      typesafeKey: "apikey_test",
+      mouseKey: "sk_mouse_test",
+      openrouterKey: "own-openrouter",
+      order: ["mouse", "typesafe", "decision1"],
+    });
+    expect(urlOf(fetch.mock.calls[0])).toBe(MOUSE_URL);
+    expect(result.engine).toBe("mouse-1");
+  });
+
   it("falls back to Mouse when TypeSafe fails", async () => {
     const fetch = vi
       .fn()
@@ -916,6 +958,20 @@ describe("API routes wire every owner-funded decisions key", () => {
     expect(urlOf(fetch.mock.calls[0])).toBe(TYPESAFE_URL);
     expect(authOf(fetch.mock.calls[0])).toBe("Bearer server-typesafe");
     expect(bodyOf(fetch.mock.calls[0]).model).toBe("jev-latest");
+  });
+
+  it("diagnose honours DECISION_ORDER", async () => {
+    vi.stubEnv("TYPESAFE_API_KEY", "server-typesafe");
+    vi.stubEnv("MOUSE_API_KEY", "server-mouse");
+    vi.stubEnv("DECISION_ORDER", "mouse,typesafe");
+    const fetch = vi.fn().mockResolvedValue(diagnosis());
+    vi.stubGlobal("fetch", fetch);
+    const response = await diagnose(
+      request({ prompt: "Translate hello into French." }, owner),
+    );
+    expect(response.status).toBe(200);
+    expect(urlOf(fetch.mock.calls[0])).toBe(MOUSE_URL);
+    expect(authOf(fetch.mock.calls[0])).toBe("Bearer server-mouse");
   });
 
   it("optimize uses Mouse for diagnostics and the quality gate", async () => {

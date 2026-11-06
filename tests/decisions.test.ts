@@ -1,5 +1,37 @@
 import { describe, expect, it } from "vitest";
-import { mapDiagnosticAnswers } from "@/lib/decisions";
+import { mapDiagnosticAnswers, parseDecisionOrder } from "@/lib/decisions";
+
+describe("parseDecisionOrder", () => {
+  it("defaults to TypeSafe, Mouse, Decision-1", () => {
+    expect(parseDecisionOrder(undefined)).toEqual([
+      "typesafe",
+      "mouse",
+      "decision1",
+    ]);
+    expect(parseDecisionOrder("")).toEqual(["typesafe", "mouse", "decision1"]);
+  });
+
+  it("honours a requested order and appends missing backends", () => {
+    expect(parseDecisionOrder("mouse,typesafe,decision1")).toEqual([
+      "mouse",
+      "typesafe",
+      "decision1",
+    ]);
+    expect(parseDecisionOrder("mouse")).toEqual([
+      "mouse",
+      "typesafe",
+      "decision1",
+    ]);
+  });
+
+  it("accepts aliases, ignores unknown names and duplicates", () => {
+    expect(parseDecisionOrder("openrouter, decision-1, mouse, bogus")).toEqual([
+      "decision1",
+      "mouse",
+      "typesafe",
+    ]);
+  });
+});
 
 describe("mapDiagnosticAnswers kind routing", () => {
   const factory = (answers: Record<string, unknown>) =>

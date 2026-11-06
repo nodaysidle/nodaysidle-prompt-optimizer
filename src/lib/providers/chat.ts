@@ -17,6 +17,7 @@ import {
 } from "../optimizer-prompt";
 import type {
   CompletionResult,
+  DecisionBackendName,
   DiagnosticResult,
   EngineTarget,
   Model,
@@ -45,6 +46,8 @@ export interface OptimizeParams {
   /** Server TypeSafe key for diagnostics and the quality gate; tried before Decision-1. */
   typesafeApiKey?: string;
   mouseApiKey?: string;
+  /** Judge order chosen by the server; the default is TypeSafe, Mouse, Decision-1. */
+  decisionOrder?: DecisionBackendName[];
   signal?: AbortSignal;
   onStage?: (stage: Stage) => void;
 }
@@ -128,6 +131,7 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
     typesafeKey: params.typesafeApiKey,
     mouseKey: params.mouseApiKey,
     openrouterKey: params.openrouterApiKey,
+    order: params.decisionOrder,
     signal: params.signal,
   });
 
@@ -211,6 +215,7 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
       typesafeKey: params.typesafeApiKey,
       mouseKey: params.mouseApiKey,
       openrouterKey: params.openrouterApiKey,
+      order: params.decisionOrder,
       signal: params.signal,
     });
   };

@@ -37,7 +37,17 @@ function deferred<T>() {
 function route(handlers: Record<string, (init: RequestInit) => Response | Promise<Response>>) {
   return vi.fn(async (url: string, init: RequestInit = {}) => {
     if (url === "/api/config")
-      return Response.json({ sharedAccess: false, deepseek: false, openrouter: false });
+      return Response.json({
+        sharedAccess: false,
+        deepseek: false,
+        openrouter: false,
+        decisions: {
+          typesafe: false,
+          mouse: false,
+          decision1: false,
+          order: ["typesafe", "mouse", "decision1"],
+        },
+      });
     const handler = handlers[url];
     if (!handler) throw new Error(`unexpected request to ${url}`);
     return handler(init);

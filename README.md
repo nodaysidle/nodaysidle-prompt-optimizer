@@ -40,6 +40,7 @@ The final prompt is built from the edits you keep and stays editable. If your ha
 - Your prompt goes from the browser to this app's server and on to the provider you chose. History and settings stay in your browser.
 - The server's own keys are used only when the caller sends a valid `x-app-access-token` that matches `APP_ACCESS_TOKEN`. Without that variable set, only bring-your-own keys work.
 - Diagnostics try the server's TypeSafe key, then Mouse-1, then Decision-1 via OpenRouter when the caller has the owner token. With a bring-your-own OpenRouter key they use Decision-1. With no decisions key at all they run as a rule-based estimate and the result says so.
+- `DECISION_ORDER` reorders the judge chain without disabling it. It is a comma-separated list of `typesafe`, `mouse`, `decision1`; missing names are appended in the default order, so `mouse` means Mouse first, then TypeSafe, then Decision-1.
 - No analytics. No accounts.
 
 ## Run it locally
@@ -61,6 +62,7 @@ npm run typecheck
 npm test            # unit tests
 npm run test:e2e    # browser: overflow at 390, 768, 1440 px, 44px targets, focus ring, focus traps
 npm run build
+npm run check:contracts  # TypeSafe OpenAPI path/model plus Mouse and Decision-1 reachability
 ```
 
 ### Output quality

@@ -3,6 +3,8 @@ export const PROMPT_KINDS = ["user", "system", "image", "video"] as const;
 export type PromptKind = (typeof PROMPT_KINDS)[number];
 export const MODES = ["minimal", "structured", "creative"] as const;
 export type OptimizationMode = (typeof MODES)[number];
+export const DECISION_BACKENDS = ["typesafe", "mouse", "decision1"] as const;
+export type DecisionBackendName = (typeof DECISION_BACKENDS)[number];
 export const ENGINE_TARGETS = [
   "universal",
   "nano-banana",
@@ -125,8 +127,15 @@ export const DEFAULT_SETTINGS: AppSettings = {
   rememberKeys: false,
   rememberToken: false,
 };
+export interface ServerDecisions {
+  typesafe: boolean;
+  mouse: boolean;
+  decision1: boolean;
+  order: DecisionBackendName[];
+}
 export interface ServerConfig {
   sharedAccess: boolean;
   deepseek: boolean;
   openrouter: boolean;
+  decisions: ServerDecisions;
 }

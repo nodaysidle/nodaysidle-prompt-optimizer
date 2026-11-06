@@ -25,7 +25,19 @@ async function mock(page: Page, options: { fail?: boolean; keyed?: boolean } = {
   await page.route("**/api/**", async (route) => {
     const url = route.request().url();
     if (url.endsWith("/config"))
-      return route.fulfill({ json: { sharedAccess: false, deepseek: false, openrouter: false } });
+      return route.fulfill({
+        json: {
+          sharedAccess: false,
+          deepseek: false,
+          openrouter: false,
+          decisions: {
+            typesafe: false,
+            mouse: false,
+            decision1: false,
+            order: ["typesafe", "mouse", "decision1"],
+          },
+        },
+      });
     if (url.endsWith("/diagnose"))
       return route.fulfill({
         json: {

@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit --incremental false",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "check:contracts": "node scripts/check-decision-contracts.mjs",
     "eval": "node evals/run-eval.ts"
   },
   "dependencies": {

@@ -1,5 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import { parseDecisionOrder } from "../decisions";
 import { AppError } from "../validation";
+import type { DecisionBackendName } from "../types";
 
 const providers = {
   deepseek: { header: "x-deepseek-key", env: "DEEPSEEK_API_KEY" },
@@ -116,12 +118,27 @@ export function resolveKey(
     throw new AppError(`${provider} is not configured for shared access.`, 401);
   return shared;
 }
+/**
+ * The owner-selected judge order. `DECISION_ORDER` is a comma-separated list;
+ * unknown names are ignored and missing backends are appended in the default
+ * order, so a typo reorders but never disables the gate.
+ */
+export function resolveDecisionOrder(): DecisionBackendName[] {
+  return parseDecisionOrder(process.env.DECISION_ORDER);
+}
+
 export function serverConfig() {
   const sharedAccess = Boolean(process.env.APP_ACCESS_TOKEN?.trim());
   return {
     sharedAccess,
     deepseek: sharedAccess && Boolean(process.env.DEEPSEEK_API_KEY?.trim()),
     openrouter: sharedAccess && Boolean(process.env.OPENROUTER_API_KEY?.trim()),
+    decisions: {
+      typesafe: sharedAccess && Boolean(process.env.TYPESAFE_API_KEY?.trim()),
+      mouse: sharedAccess && Boolean(process.env.MOUSE_API_KEY?.trim()),
+      decision1: sharedAccess && Boolean(process.env.OPENROUTER_API_KEY?.trim()),
+      order: resolveDecisionOrder(),
+    },
   };
 }
 const MAX_BUCKETS = 1000;

@@ -25,8 +25,8 @@ import {
 import { assemble, buildRedline, editsOf } from "@/lib/redline";
 import { VERDICT_LABEL, verdictOf, type Verdict } from "@/lib/verdict";
 import {
-  IDENTITY_LOCK_OUTPUT,
   findPreservationViolations,
+  identityLockFor,
   isSubjectInPhotoPrompt,
 } from "@/lib/optimizer-prompt";
 import { BrandMark } from "./brand-mark";
@@ -155,7 +155,7 @@ function protectedProblems(snapshot: DraftSnapshot, finalText: string): string[]
   if (
     visual &&
     isSubjectInPhotoPrompt(snapshot.prompt) &&
-    !finalText.trim().startsWith(IDENTITY_LOCK_OUTPUT)
+    !finalText.trim().startsWith(identityLockFor(snapshot.engineTarget))
   )
     problems.push("The reference-photo line is missing, so likeness is no longer requested.");
   return problems;

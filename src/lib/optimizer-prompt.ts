@@ -13,6 +13,20 @@ import { ProviderError } from "./providers/completion";
 export const IDENTITY_LOCK_OUTPUT =
   "Use photo in the attachment as only reference. Identity lock: exact likeness, facial geometry / proportions.";
 
+/**
+ * Omni 1.2 accepts up to six reference images. "Only reference" would contradict
+ * that, so the multi-reference target names the role and keeps each subject
+ * consistent without turning the reference into a literal frame.
+ */
+export const OMNI_1_2_IDENTITY_LOCK_OUTPUT =
+  "Use the attached reference images as identity references. Keep each referenced subject's face, hair, build, and clothing consistent across shots. Do not treat the references as literal frames unless the prompt asks for that.";
+
+export function identityLockFor(engineTarget?: EngineTarget): string {
+  return engineTarget === "omni-1.2"
+    ? OMNI_1_2_IDENTITY_LOCK_OUTPUT
+    : IDENTITY_LOCK_OUTPUT;
+}
+
 export function isSubjectInPhotoPrompt(prompt: string): boolean {
   return /^the subject (?:in|from) the photo/i.test(prompt.trim());
 }
@@ -23,8 +37,12 @@ export function isOnlySubjectPrompt(prompt: string): boolean {
   return rest.length === 0;
 }
 
-export function enforceIdentityLock(optimized: string, kind: PromptKind): string {
-  const prefix = IDENTITY_LOCK_OUTPUT;
+export function enforceIdentityLock(
+  optimized: string,
+  kind: PromptKind,
+  engineTarget?: EngineTarget,
+): string {
+  const prefix = identityLockFor(engineTarget);
   const trimmed = optimized.trim();
 
   if (trimmed === prefix) return prefix;
@@ -479,11 +497,12 @@ export function buildOptimizerMessages(
 
   let subjectRuleContext = "";
   if ((kind === "image" || kind === "video") && isSubjectInPhotoPrompt(prompt)) {
+    const lockLine = identityLockFor(engineTarget);
     subjectRuleContext = `
 STRICT IDENTITY LOCK MANDATE:
 The user prompt begins with "The subject in the photo" or "The subject from the photo".
 You MUST start your "optimized" rewritten prompt with this EXACT sentence:
-"${IDENTITY_LOCK_OUTPUT}"
+"${lockLine}"
 ${
   isOnlySubjectPrompt(prompt)
     ? 'Since no additional scene details were provided, the "optimized" prompt field MUST BE EXACTLY this sentence and nothing else.'

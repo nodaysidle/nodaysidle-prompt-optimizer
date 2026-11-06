@@ -5,6 +5,7 @@ import {
   findFabricatedPlaceholders,
   findPreservationViolations,
   findRepeatedBriefItems,
+  identityLockFor,
   isQuestionnairePrompt,
   isOnlySubjectPrompt,
   isSubjectInPhotoPrompt,
@@ -173,6 +174,14 @@ describe("identity lock helpers", () => {
     expect(locked).toBe(
       "Use photo in the attachment as only reference. Identity lock: exact likeness, facial geometry / proportions.",
     );
+  });
+
+  it("uses multi-reference wording for Omni 1.2", () => {
+    expect(identityLockFor("omni-1.2")).toContain("attached reference images");
+    expect(identityLockFor("veo")).toContain("only reference");
+    const locked = enforceIdentityLock("a sunny portrait", "image", "omni-1.2");
+    expect(locked.startsWith("Use the attached reference images")).toBe(true);
+    expect(locked).not.toContain("only reference");
   });
 });
 

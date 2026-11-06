@@ -1,11 +1,11 @@
 import {
-  IDENTITY_LOCK_OUTPUT,
   buildOptimizerMessages,
   buildRepairMessages,
   enforceIdentityLock,
   findFabricatedPlaceholders,
   findLengthViolation,
   findRepeatedBriefItems,
+  identityLockFor,
   maskCodeBlocks,
   maxRewriteChars,
   trimNearMiss,
@@ -110,7 +110,7 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
 
   if (isOnlySubject) {
     return {
-      optimized: IDENTITY_LOCK_OUTPUT,
+      optimized: identityLockFor(params.engineTarget),
       negativePrompt:
         "identity mismatch, facial morphing, different person, distorted features, bad likeness",
       summary:
@@ -175,7 +175,11 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
 
       parsed.optimized = trimNearMiss(parsed.optimized, maxRewriteChars(params.prompt, params.kind));
       if (hasSubjectPrefix) {
-        parsed.optimized = enforceIdentityLock(parsed.optimized, params.kind);
+        parsed.optimized = enforceIdentityLock(
+          parsed.optimized,
+          params.kind,
+          params.engineTarget,
+        );
         if (!parsed.changes.some((c) => /identity lock|likeness|facial geometry/i.test(c))) {
           parsed.changes.unshift(
             "Enforced reference photo identity lock (exact likeness, facial geometry / proportions)",
@@ -244,7 +248,10 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
     return ` Recurring defects: ${defects.slice(0, 3).join("; ")}.`;
   };
 
-  const original = () => (hasSubjectPrefix ? enforceIdentityLock(params.prompt, params.kind) : params.prompt);
+  const original = () =>
+    hasSubjectPrefix
+      ? enforceIdentityLock(params.prompt, params.kind, params.engineTarget)
+      : params.prompt;
 
   const describeGate = (gate?: QualityGateResult) =>
     gate

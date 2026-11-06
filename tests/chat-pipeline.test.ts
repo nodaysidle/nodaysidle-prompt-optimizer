@@ -178,6 +178,39 @@ describe("optimizePrompt pipeline", () => {
     expect(mockedGate.mock.calls[0][0].original.startsWith("Use photo in the attachment")).toBe(true);
   });
 
+  it("returns the multi-reference lock for a subject-only Omni 1.2 prompt", async () => {
+    const result = await optimizePrompt({
+      prompt: "The subject in the photo...",
+      kind: "video",
+      engineTarget: "omni-1.2",
+      deepseekApiKey: "sk-test",
+      model: "deepseek-v4.1-flash",
+      openrouterApiKey: "sk-or-test",
+    });
+
+    expect(result.optimized).toContain("attached reference images");
+    expect(result.optimized).not.toContain("only reference");
+    expect(mockedChat).not.toHaveBeenCalled();
+  });
+
+  it("uses multi-reference lock wording for Omni 1.2", async () => {
+    mockedChat.mockResolvedValue(responseJson("A red car in the rain."));
+    mockedGate.mockResolvedValue({ intentPreserved: 0.95, overEngineered: 0.1, passed: true });
+
+    const result = await optimizePrompt({
+      prompt: "The subject from the photo standing in the rain",
+      kind: "video",
+      engineTarget: "omni-1.2",
+      deepseekApiKey: "sk-test",
+      model: "deepseek-v4.1-flash",
+      openrouterApiKey: "sk-or-test",
+    });
+
+    expect(result.optimized.startsWith("Use the attached reference images")).toBe(true);
+    expect(result.optimized).not.toContain("only reference");
+    expect(mockedGate.mock.calls[0][0].original.startsWith("Use the attached reference images")).toBe(true);
+  });
+
   it("surfaces unresolved questions in the result", async () => {
     mockedChat.mockResolvedValue(
       completion(

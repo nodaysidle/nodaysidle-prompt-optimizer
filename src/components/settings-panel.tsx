@@ -53,7 +53,6 @@ function useSettingsForm({
   useEffect(() => {
     dirtyRef.current?.(dirty);
   }, [dirty]);
-
   function update<K extends keyof AppSettings>(key: K, value: AppSettings[K]) {
     controller.current?.abort();
     setBusy(false);
@@ -446,7 +445,7 @@ function SettingsFooter({ form }: { form: SettingsForm }) {
   );
 }
 
-export function SettingsContent({
+function SettingsFormContent({
   className,
   onClose,
   onDirtyChange,
@@ -458,6 +457,22 @@ export function SettingsContent({
       <SettingsFooter form={form} />
     </div>
   );
+}
+
+/**
+ * Mount the form only after localStorage has been read. Mounting it earlier made
+ * useState(settings) capture defaults, so a direct /settings visit showed empty
+ * fields and Save could wipe remembered credentials.
+ */
+export function SettingsContent(props: SettingsContentProps) {
+  const { hydrated } = useSettings();
+  if (!hydrated)
+    return (
+      <p className="help" role="status">
+        Loading saved settings...
+      </p>
+    );
+  return <SettingsFormContent {...props} />;
 }
 
 function SettingsDialog({ onClose }: { onClose: () => void }) {
@@ -490,7 +505,17 @@ export function SettingsPanel({
   open: boolean;
   onClose: () => void;
 }) {
-  return open ? <SettingsDialog onClose={onClose} /> : null;
+  const { hydrated } = useSettings();
+  if (!open) return null;
+  if (!hydrated)
+    return (
+      <Dialog title="Settings" onClose={onClose}>
+        <p className="help" role="status">
+          Loading saved settings...
+        </p>
+      </Dialog>
+    );
+  return <SettingsDialog onClose={onClose} />;
 }
 
 export function SettingsPageView() {

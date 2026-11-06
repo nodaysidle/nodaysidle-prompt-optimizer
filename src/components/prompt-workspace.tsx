@@ -16,7 +16,7 @@ import {
 import { PROFILES } from "@/lib/profiles";
 import { PROMPT_EXAMPLES } from "@/lib/examples";
 import { KIND_LABEL, KIND_SHORT, MODE_LABEL } from "@/lib/labels";
-import { loadHistory, saveHistoryItem } from "@/lib/storage";
+import { loadHistory, saveHistoryItem, updateHistoryItem } from "@/lib/storage";
 import {
   composePresets,
   parsePresets,
@@ -48,6 +48,8 @@ interface Candidate {
   hand: string | null;
   showRejected: boolean;
   historical?: boolean;
+  /** The saved item this result belongs to, so keep/revert and hand edits persist. */
+  historyId?: string;
 }
 interface Draft {
   prompt: string;
@@ -295,6 +297,25 @@ export function PromptWorkspace() {
       controller.abort();
     };
   }, [draft, settings, contextKey]);
+  useEffect(() => {
+    const historyId = candidate?.historyId;
+    // Viewing the rejected draft is not a final-prompt choice. Only the kept
+    // edits and hand-edited final text update what history will restore.
+    if (!historyId || candidate?.showRejected) return;
+    const timer = setTimeout(() => {
+      try {
+        updateHistoryItem(historyId, {
+          finalPrompt: finalText,
+          revertedEdits: [...candidate.reverted],
+        });
+      } catch {
+        setHistoryNotice(
+          "The result changed, but history could not be updated. Browser storage may be full or disabled.",
+        );
+      }
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [candidate, finalText]);
 
   async function diagnose() {
     if (diagnosticTimer.current) clearTimeout(diagnosticTimer.current);
@@ -345,23 +366,31 @@ export function PromptWorkspace() {
         if (id === optimizeId.current) setStage(next);
       });
       if (id !== optimizeId.current || controller.signal.aborted) return;
-      setCandidate({
-        result,
-        snapshot: frozen,
-        reverted: new Set(),
-        hand: null,
-        showRejected: false,
-      });
-      // On a phone the result sits far below the draft; take the reader to it.
-      requestAnimationFrame(() => redlineHeading.current?.focus());
+      let historyId: string | undefined;
       try {
-        saveHistoryItem({ ...result, ...frozen, original: frozen.prompt });
+        const saved = saveHistoryItem({
+          ...result,
+          ...frozen,
+          original: frozen.prompt,
+          finalPrompt: result.optimized,
+        });
+        historyId = saved.id;
         refreshHistory();
       } catch {
         setHistoryNotice(
           "The result is ready, but it could not be saved to history. Browser storage may be full or disabled.",
         );
       }
+      setCandidate({
+        result,
+        snapshot: frozen,
+        reverted: new Set(),
+        hand: null,
+        showRejected: false,
+        historyId,
+      });
+      // On a phone the result sits far below the draft; take the reader to it.
+      requestAnimationFrame(() => redlineHeading.current?.focus());
     } catch (e) {
       if (id === optimizeId.current && !controller.signal.aborted)
         setFailure(
@@ -409,6 +438,10 @@ export function PromptWorkspace() {
       },
       true,
     );
+    const restoredSegments = buildRedline(item.original, item.optimized);
+    const reverted = new Set(item.revertedEdits ?? []);
+    const assembled = assemble(restoredSegments, reverted);
+    const finalPrompt = item.finalPrompt ?? item.optimized;
     setCandidate({
       result: item,
       snapshot: {
@@ -419,10 +452,11 @@ export function PromptWorkspace() {
         profileVersion: item.profileVersion,
         model: item.model,
       },
-      reverted: new Set(),
-      hand: null,
+      reverted,
+      hand: finalPrompt === assembled ? null : finalPrompt,
       showRejected: false,
       historical: true,
+      historyId: item.id,
     });
     setHistoryOpen(false);
   }

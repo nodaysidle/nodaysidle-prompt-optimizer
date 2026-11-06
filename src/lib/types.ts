@@ -106,6 +106,10 @@ export interface PromptHistoryItem extends DraftSnapshot, OptimizationResult {
   id: string;
   createdAt: number;
   original: string;
+  /** The text the user actually ended with after keep/revert and hand edits. */
+  finalPrompt: string;
+  /** Edit ids the user reverted, so a restored redline keeps the same choices. */
+  revertedEdits: number[];
   isFavorite: boolean;
   schemaVersion: 3;
 }

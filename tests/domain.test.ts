@@ -23,6 +23,9 @@ import {
   retainHistory,
   saveSettings,
   loadSettings,
+  loadHistory,
+  saveHistoryItem,
+  updateHistoryItem,
 } from "@/lib/storage";
 import { DEFAULT_SETTINGS, type PromptHistoryItem } from "@/lib/types";
 
@@ -262,6 +265,46 @@ describe("history and credentials", () => {
     });
     // No judge ran for a legacy item: the gate stays absent, never an invented pass or fail.
     expect(items[0].qualityGate).toBeUndefined();
+  });
+  it("defaults a legacy item's final prompt to the model output", () => {
+    const [item] = migrateHistory([
+      {
+        id: "legacy-final",
+        createdAt: 1,
+        original: "Hello world",
+        optimized: "Hello, world",
+        summary: "Fix",
+        kind: "user",
+      },
+    ]);
+    expect(item.finalPrompt).toBe("Hello, world");
+    expect(item.revertedEdits).toEqual([]);
+  });
+  it("updates the final prompt and reverted edits after a run", () => {
+    localStorage.clear();
+    const saved = saveHistoryItem({
+      original: "Write a poem.",
+      optimized: "Write a poem about the sea.",
+      prompt: "Write a poem.",
+      kind: "user",
+      mode: "minimal",
+      engineTarget: "universal",
+      profileVersion: "general-2",
+      model: "deepseek-v4.1-flash",
+      summary: "Fix",
+      changes: [],
+      assumptions: [],
+      warnings: [],
+      unresolvedQuestions: [],
+    });
+    expect(saved.finalPrompt).toBe("Write a poem about the sea.");
+    updateHistoryItem(saved.id, {
+      finalPrompt: "My hand edit.",
+      revertedEdits: [2, 2, -1, 1.5],
+    });
+    const [loaded] = loadHistory();
+    expect(loaded.finalPrompt).toBe("My hand edit.");
+    expect(loaded.revertedEdits).toEqual([2]);
   });
   it("protects favorites from rolling eviction", () => {
     const favorite = { id: "favorite", isFavorite: true } as PromptHistoryItem;

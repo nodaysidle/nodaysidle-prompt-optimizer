@@ -4,6 +4,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SettingsProvider, useSettings } from "@/lib/settings-context";
@@ -166,5 +167,34 @@ describe("explicit legacy credential choices", () => {
     );
     expect(localStorage.getItem("prompt-optimizer-settings-v2")).toBe(original);
     expect(screen.getByText("Legacy saved credentials detected")).toBeTruthy();
+  });
+  it("loads remembered credentials on a direct settings page before Save is enabled", async () => {
+    localStorage.setItem(
+      "prompt-optimizer-settings-v3",
+      JSON.stringify({
+        rememberKeys: true,
+        deepseekApiKey: "fixture-remembered",
+        deepseekModel: "deepseek-v4.1-flash",
+        autoDiagnose: true,
+      }),
+    );
+    render(
+      <SettingsProvider>
+        <SettingsContent />
+      </SettingsProvider>,
+    );
+    await waitFor(() => {
+      expect(
+        (screen.getByLabelText("DeepSeek API key") as HTMLInputElement).value,
+      ).toBe("fixture-remembered");
+    });
+    const save = screen.getByRole("button", {
+      name: "Save settings",
+    }) as HTMLButtonElement;
+    expect(save.disabled).toBe(false);
+    fireEvent.click(save);
+    expect(
+      JSON.parse(localStorage.getItem("prompt-optimizer-settings-v3")!),
+    ).toMatchObject({ deepseekApiKey: "fixture-remembered" });
   });
 });

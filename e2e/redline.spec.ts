@@ -163,6 +163,51 @@ test.describe("the redline flow", () => {
     await expect(draft(page)).not.toHaveValue(/The subject in the photo/);
   });
 
+  test("direct /settings loads remembered keys and Save does not wipe them", async ({ page }) => {
+    await mock(page);
+    await page.goto("/settings");
+    await expect(page.getByLabel("DeepSeek API key")).toHaveValue("fixture-key");
+    await page.getByRole("button", { name: "Save settings" }).click();
+    const stored = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("prompt-optimizer-settings-v3")!),
+    );
+    expect(stored.deepseekApiKey).toBe("fixture-key");
+  });
+
+  test("history restores the final text after a revert", async ({ page }) => {
+    await mock(page);
+    await page.goto("/");
+    await runIt(page);
+    await page.getByRole("button", { name: "Revert this edit" }).first().click();
+    const final = page.getByLabel("Final prompt");
+    await expect(final).toHaveValue(/Make it short\./);
+    await page.waitForTimeout(400);
+    await page.getByRole("button", { name: "History", exact: true }).click();
+    await expect(page.locator(".history-preview").first()).toContainText(
+      "Make it short.",
+    );
+    await page.getByRole("button", { name: "Load saved prompt" }).click();
+    await expect(page.getByLabel("Final prompt")).toHaveValue(/Make it short\./);
+    await expect(page.getByRole("button", { name: "Keep this edit" })).toBeVisible();
+  });
+
+  test("history restores a hand-edited final prompt", async ({ page }) => {
+    await mock(page);
+    await page.goto("/");
+    await runIt(page);
+    await page.getByLabel("Final prompt").fill("Hand edited final prompt.");
+    await page.waitForTimeout(400);
+    await page.getByRole("button", { name: "History", exact: true }).click();
+    await expect(page.locator(".history-preview").first()).toContainText(
+      "Hand edited final prompt.",
+    );
+    await page.getByRole("button", { name: "Load saved prompt" }).click();
+    await expect(page.getByLabel("Final prompt")).toHaveValue(
+      "Hand edited final prompt.",
+    );
+    await expect(page.getByText("Edited by hand")).toBeVisible();
+  });
+
   test("history uses human labels and confirms a clear inside the dialog", async ({ page }) => {
     await mock(page);
     await page.goto("/");

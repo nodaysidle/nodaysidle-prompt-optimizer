@@ -175,6 +175,11 @@ export function migrateHistory(value: unknown): PromptHistoryItem[] {
         model: migrateModel(item.model),
       });
       const optimized = text(item.optimized, "Candidate");
+      const finalPrompt =
+        typeof item.finalPrompt === "string"
+          ? item.finalPrompt.slice(0, 20000)
+          : optimized;
+      const revertedEdits = revertedIds(item.revertedEdits);
       const summary = text(item.summary, "Summary", false, 2000);
       const arrays = (key: string) =>
         Array.isArray(item[key])
@@ -196,6 +201,8 @@ export function migrateHistory(value: unknown): PromptHistoryItem[] {
           original,
           prompt: original,
           optimized,
+          finalPrompt,
+          revertedEdits,
           summary,
           kind: domain.kind,
           mode: domain.mode,
@@ -369,14 +376,37 @@ function writeHistory(items: PromptHistoryItem[]) {
   localStorage.setItem(HISTORY_KEY, JSON.stringify(retainHistory(items)));
   localStorage.removeItem(LEGACY_HISTORY);
 }
-export function saveHistoryItem(
-  item: Omit<
-    PromptHistoryItem,
-    "id" | "createdAt" | "isFavorite" | "schemaVersion"
-  >,
-): PromptHistoryItem {
+type NewHistoryItem = Omit<
+  PromptHistoryItem,
+  | "id"
+  | "createdAt"
+  | "isFavorite"
+  | "schemaVersion"
+  | "finalPrompt"
+  | "revertedEdits"
+> & {
+  finalPrompt?: string;
+  revertedEdits?: number[];
+};
+
+/** Edit ids are small non-negative integers; anything else is dropped, never trusted. */
+function revertedIds(value: unknown): number[] {
+  if (!Array.isArray(value)) return [];
+  return [
+    ...new Set(
+      value.filter(
+        (id): id is number =>
+          typeof id === "number" && Number.isInteger(id) && id >= 0,
+      ),
+    ),
+  ].slice(0, 500);
+}
+
+export function saveHistoryItem(item: NewHistoryItem): PromptHistoryItem {
   const next: PromptHistoryItem = {
     ...item,
+    finalPrompt: String(item.finalPrompt ?? item.optimized).slice(0, 20000),
+    revertedEdits: revertedIds(item.revertedEdits),
     id: crypto.randomUUID(),
     createdAt: Date.now(),
     isFavorite: false,
@@ -384,6 +414,27 @@ export function saveHistoryItem(
   };
   writeHistory([next, ...loadHistory()]);
   return next;
+}
+
+/**
+ * The user keeps or reverts edits after the run, and may hand-edit the final text.
+ * Persist that final state so history restores what they actually copied, not the
+ * model's first draft.
+ */
+export function updateHistoryItem(
+  id: string,
+  patch: { finalPrompt: string; revertedEdits: number[] },
+): PromptHistoryItem[] {
+  const items = loadHistory();
+  const at = items.findIndex((item) => item.id === id);
+  if (at === -1) return items;
+  items[at] = {
+    ...items[at],
+    finalPrompt: String(patch.finalPrompt ?? "").slice(0, 20000),
+    revertedEdits: revertedIds(patch.revertedEdits),
+  };
+  writeHistory(items);
+  return items;
 }
 export function toggleFavoriteHistoryItem(id: string) {
   const items = loadHistory().map((item) =>

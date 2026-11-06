@@ -40,7 +40,7 @@ function HistoryContent({
   const filtered = items.filter(
     (item) =>
       (!favorites || item.isFavorite) &&
-      `${item.original} ${item.optimized}`
+      `${item.original} ${item.optimized} ${item.finalPrompt}`
         .toLowerCase()
         .includes(search.toLowerCase()),
   );
@@ -125,7 +125,11 @@ function HistoryContent({
                   {PROFILES[item.engineTarget].label} ·{" "}
                   {new Date(item.createdAt).toLocaleString()}
                 </p>
-                <p className="history-preview">{item.optimized}</p>
+                <p className="history-preview">
+                  {item.finalPrompt.trim()
+                    ? item.finalPrompt
+                    : "(empty final prompt)"}
+                </p>
                 <div className="action-row">
                   <button onClick={() => onSelectPrompt(item)}>
                     Load saved prompt
@@ -146,7 +150,7 @@ function HistoryContent({
                   <button
                     onClick={async () => {
                       try {
-                        await navigator.clipboard.writeText(item.optimized);
+                        await navigator.clipboard.writeText(item.finalPrompt);
                         setCopiedId(item.id);
                         window.setTimeout(() => setCopiedId(null), 1600);
                       } catch {
@@ -156,7 +160,7 @@ function HistoryContent({
                       }
                     }}
                   >
-                    {copiedId === item.id ? "Copied" : "Copy saved candidate"}
+                    {copiedId === item.id ? "Copied" : "Copy saved prompt"}
                   </button>
                 </div>
               </article>

@@ -163,6 +163,29 @@ test.describe("the redline flow", () => {
     await expect(draft(page)).not.toHaveValue(/The subject in the photo/);
   });
 
+  test("video options keep Veo and Omni 1.1 and add Omni 1.2", async ({ page }) => {
+    await mock(page);
+    await page.goto("/");
+    await page.getByRole("button", { name: "Video prompt" }).click();
+    const profile = page.getByLabel("Writing for");
+    expect(await profile.locator("option").allTextContents()).toEqual([
+      "General",
+      "Google Veo 3.1",
+      "Gemini Omni 1.1",
+      "Google Omni 1.2 Flash",
+    ]);
+    await profile.selectOption("omni-1.2");
+    await expect(
+      page.getByText("Text guidance only; video is not generated here."),
+    ).toBeVisible();
+    const lock = page.getByRole("button", { name: "Lock subject likeness" });
+    await expect(lock).toBeVisible();
+    await draft(page).fill("The subject in the photo walks along a pier.");
+    await expect(
+      page.getByRole("button", { name: "Likeness lock on" }),
+    ).toBeVisible();
+  });
+
   test("direct /settings loads remembered keys and Save does not wipe them", async ({ page }) => {
     await mock(page);
     await page.goto("/settings");

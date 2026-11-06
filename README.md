@@ -2,7 +2,7 @@
 
 Paste a prompt. Get back edits to your own words, not a replacement you have to trust. Keep the edits you want, revert the rest, copy the final prompt.
 
-Works on user prompts, system prompts, image prompts (Nano Banana, ChatGPT Images) and video prompts (Veo 3.1, Gemini Omni). Image and video output is text only. Nothing is rendered here.
+Works on user prompts, system prompts, image prompts (Nano Banana, ChatGPT Images) and video prompts (Veo 3.1, Gemini Omni 1.1 and Omni 1.2 Flash). Image and video output is text only. Nothing is rendered here.
 
 Live: https://nodaysidle-prompt-optimizer.vercel.app
 

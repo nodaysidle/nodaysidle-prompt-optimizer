@@ -11,6 +11,7 @@ export const ENGINE_TARGETS = [
   "gpt-image",
   "veo",
   "omni",
+  "omni-1.2",
 ] as const;
 export type EngineTarget = (typeof ENGINE_TARGETS)[number];
 /** Older saved history items may carry retired targets (midjourney, flux, ...); treat them as universal. */

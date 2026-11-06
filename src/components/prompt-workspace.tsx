@@ -726,11 +726,23 @@ export function PromptWorkspace() {
                 >
                   <option value="">No added ratio</option>
                   {Array.from(
-                    new Set(["16:9", "9:16", "1:1", "4:5", ...(ratio ? [ratio] : [])]),
+                    new Set([
+                      ...(draft.engineTarget === "omni-1.2"
+                        ? ["16:9", "9:16"]
+                        : ["16:9", "9:16", "1:1", "4:5"]),
+                      ...(ratio ? [ratio] : []),
+                    ]),
                   ).map((value) => (
                     <option key={value}>{value}</option>
                   ))}
                 </select>
+                {draft.engineTarget === "omni-1.2" && (
+                  <p className="help">
+                    Omni 1.2 supports 16:9 and 9:16 only. Set its 3 to 15
+                    second duration in the renderer; a duration in the prompt is
+                    overridden there.
+                  </p>
+                )}
                 <label htmlFor="lens">One lens</label>
                 <select
                   id="lens"

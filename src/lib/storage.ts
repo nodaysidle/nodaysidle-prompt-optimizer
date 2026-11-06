@@ -225,8 +225,8 @@ export function migrateHistory(value: unknown): PromptHistoryItem[] {
           PROFILES[domain.engineTarget].negative
             ? { negativePrompt: item.negativePrompt.slice(0, 2000) }
             : {}),
-          ...(historicalQuality(item.qualityGate, domain.mode)
-            ? { qualityGate: historicalQuality(item.qualityGate, domain.mode) }
+          ...(historicalQuality(item.qualityGate, domain.mode, domain.kind)
+            ? { qualityGate: historicalQuality(item.qualityGate, domain.mode, domain.kind) }
             : {}),
           ...(item.diagnostics
             ? {
@@ -249,6 +249,7 @@ export function migrateHistory(value: unknown): PromptHistoryItem[] {
 function historicalQuality(
   value: unknown,
   mode: OptimizationMode,
+  kind: PromptHistoryItem["kind"],
 ): PromptHistoryItem["qualityGate"] {
   if (!value) return undefined;
   try {
@@ -260,6 +261,10 @@ function historicalQuality(
         ? undefined
         : numberValue(gate.invents, 0, 1, "Invented requirements");
     const limits = GATE_BY_MODE[mode];
+    const maxInvented =
+      kind === "image" || kind === "video"
+        ? Math.min(0.75, limits.maxInvented + 0.15)
+        : limits.maxInvented;
     return {
       intentPreserved,
       overEngineered,
@@ -272,7 +277,7 @@ function historicalQuality(
       passed:
         intentPreserved >= limits.intentPreserved &&
         overEngineered <= limits.overEngineered &&
-        (invents === undefined || invents <= limits.maxInvented),
+        (invents === undefined || invents <= maxInvented),
       ...(typeof gate.judge === "string"
         ? { judge: text(gate.judge, "Judge", false, 200) }
         : {}),

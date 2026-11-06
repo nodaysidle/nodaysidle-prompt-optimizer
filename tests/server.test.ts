@@ -767,6 +767,57 @@ describe("decisions: diagnostics and quality gate", () => {
     });
     expect(gate).toMatchObject({ passed: true, invents: 0.2 });
   });
+  it("uses a visual-craft-aware question for image and video prompts", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      Response.json({
+        answers: {
+          intent_preserved: { noul: 0.9 },
+          over_engineered: { noul: 0.1 },
+          invents: { noul: 0.2 },
+          improves: { noul: 0.8 },
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", fetch);
+    await runQualityGate({
+      original: "A fisherman at dawn.",
+      optimized: "A fisherman at dawn, warm low light, wide shot, calm water.",
+      kind: "image",
+      openrouterKey: "own-openrouter",
+    });
+    expect(bodyOf(fetch.mock.calls[0]).questions.invents.instructions).toContain(
+      "audio craft",
+    );
+  });
+  it("allows visual craft a slightly wider invented ceiling than a text prompt", async () => {
+    const fetch = vi.fn().mockImplementation(() =>
+      Promise.resolve(
+        Response.json({
+          answers: {
+            intent_preserved: { noul: 0.95 },
+            over_engineered: { noul: 0.15 },
+            invents: { noul: 0.6 },
+            improves: { noul: 0.8 },
+          },
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetch);
+    const image = await runQualityGate({
+      original: "A lamp.",
+      optimized: "A lamp, warm pool of light, ticking clock.",
+      kind: "image",
+      openrouterKey: "own-openrouter",
+    });
+    const user = await runQualityGate({
+      original: "A lamp.",
+      optimized: "A lamp, warm pool of light, ticking clock.",
+      kind: "user",
+      openrouterKey: "own-openrouter",
+    });
+    expect(image).toMatchObject({ passed: true, invents: 0.6 });
+    expect(user).toMatchObject({ passed: false, invents: 0.6 });
+  });
 });
 
 describe("decisions: TypeSafe backend", () => {

@@ -213,6 +213,7 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
       original: maskCodeBlocks(original()),
       optimized: maskCodeBlocks(optimized),
       mode,
+      kind: params.kind,
       typesafeKey: params.typesafeApiKey,
       mouseKey: params.mouseApiKey,
       openrouterKey: params.openrouterApiKey,
@@ -255,12 +256,15 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
       : "deterministic checks only";
 
   const limits = GATE_BY_MODE[mode];
+  const inventedLimit = isImageOrVideo
+    ? Math.min(0.75, limits.maxInvented + 0.15)
+    : limits.maxInvented;
   const gateProblems = (gate?: QualityGateResult): string[] => {
     if (!gate || gate.passed) return [];
     const out: string[] = [];
     if (gate.intentPreserved < limits.intentPreserved) out.push(`intent match only ${Math.round(gate.intentPreserved * 100)}%`);
     if (gate.overEngineered > limits.overEngineered) out.push(`verbosity risk ${Math.round(gate.overEngineered * 100)}%`);
-    if (gate.invents !== undefined && gate.invents > limits.maxInvented)
+    if (gate.invents !== undefined && gate.invents > inventedLimit)
       out.push(`invented requirements risk ${Math.round(gate.invents * 100)}%`);
     return out;
   };

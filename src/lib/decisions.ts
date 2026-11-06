@@ -23,6 +23,7 @@ export interface QualityGateParams {
   original: string;
   optimized: string;
   mode?: OptimizationMode;
+  kind?: PromptKind;
   typesafeKey?: string;
   mouseKey?: string;
   openrouterKey?: string;
@@ -224,6 +225,7 @@ function evaluateGateScores(
   invents: number | undefined,
   improvement: number | undefined,
   mode: OptimizationMode,
+  maxInvented: number = GATE_BY_MODE[mode].maxInvented,
 ): QualityGateResult {
   const limits = GATE_BY_MODE[mode];
   return {
@@ -234,7 +236,7 @@ function evaluateGateScores(
     passed:
       intentPreserved >= limits.intentPreserved &&
       overEngineered <= limits.overEngineered &&
-      (invents === undefined || invents <= limits.maxInvented),
+      (invents === undefined || invents <= maxInvented),
     judge,
   };
 }
@@ -450,6 +452,8 @@ const RESTRUCTURE_NOTE =
   " The user chose Restructure mode: headings, sections, and an output-format line that organise the original's own content are requested structure, not bloat.";
 const INVENTED_QUESTION =
   "Does `optimized` add requirements, facts, constraints, tools, versions, examples, or success criteria that `original` does not state and the user did not ask for? Restating existing intent, organising it, or naming a detail the original clearly implies does not count. Answer yes when the rewrite introduces a new demand the user must now satisfy.";
+const VISUAL_INVENTED_QUESTION =
+  "Does `optimized` add a new hard requirement or factual claim that `original` does not state and the user did not ask for, such as a specific product, brand, person, text string, duration, aspect ratio, or a must-include or must-exclude item? Do not count visual or audio craft elaboration such as lighting, lens, camera movement, composition, color palette, mood, medium, ambience, sound effects, music, shot structure, cuts, or timecodes: that is the job of a visual prompt. Details that only make an existing subject more specific do not count either.";
 const CREATIVE_INVENTED_NOTE =
   " The user chose Allow additions mode: optional visual or stylistic expansion is allowed when the rewrite lists it as an assumption, but new task facts or requirements are still invented.";
 
@@ -467,8 +471,18 @@ export async function runQualityGate(
   if (!backends.length) return undefined;
 
   const mode = params.mode ?? "minimal";
+  const kind = params.kind ?? "user";
+  const visual = kind === "image" || kind === "video";
   const overEngineeredQuestion = mode === "minimal" ? OVER_ENGINEERED_QUESTION : OVER_ENGINEERED_QUESTION + RESTRUCTURE_NOTE;
-  const inventedQuestion = mode === "creative" ? INVENTED_QUESTION + CREATIVE_INVENTED_NOTE : INVENTED_QUESTION;
+  const inventedQuestion = `${
+    visual ? VISUAL_INVENTED_QUESTION : INVENTED_QUESTION
+  }${mode === "creative" ? CREATIVE_INVENTED_NOTE : ""}`;
+  // Visual craft adds detail the judge can read as new requirements. Give image
+  // and video a slightly wider invented-requirements ceiling; hard additions such
+  // as a new product, text, duration or aspect ratio still fail.
+  const maxInvented = visual
+    ? Math.min(0.75, GATE_BY_MODE[mode].maxInvented + 0.15)
+    : GATE_BY_MODE[mode].maxInvented;
 
   const inRange = (value: unknown): value is number =>
     typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
@@ -504,6 +518,7 @@ export async function runQualityGate(
           invents,
           improvement,
           mode,
+          maxInvented,
         );
       },
       params.signal,

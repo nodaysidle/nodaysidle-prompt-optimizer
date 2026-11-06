@@ -174,6 +174,26 @@ test.describe("the redline flow", () => {
     expect(stored.deepseekApiKey).toBe("fixture-key");
   });
 
+  test("direct /settings warns before leaving with unsaved changes", async ({ page }) => {
+    await mock(page);
+    await page.goto("/settings");
+    await expect(page.getByLabel("DeepSeek API key")).toHaveValue("fixture-key");
+    await page.getByLabel("DeepSeek API key").fill("changed-key");
+    await page.waitForTimeout(150);
+    let asked = false;
+    page.on("dialog", async (dialog) => {
+      asked = true;
+      await dialog.dismiss();
+    });
+    await page.getByRole("link", { name: "Back to workbench" }).click();
+    expect(asked).toBe(true);
+    expect(new URL(page.url()).pathname).toBe("/settings");
+    page.removeAllListeners("dialog");
+    page.on("dialog", (dialog) => dialog.accept());
+    await page.getByRole("link", { name: "Back to workbench" }).click();
+    await expect(page).toHaveURL(/\/$/);
+  });
+
   test("history restores the final text after a revert", async ({ page }) => {
     await mock(page);
     await page.goto("/");

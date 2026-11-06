@@ -55,6 +55,8 @@ export interface DiagnosticResult {
 export interface QualityGateResult {
   intentPreserved: number; // 0..1
   overEngineered: number; // 0..1
+  /** 0..1, the judge thinks the rewrite added requirements the original did not state. */
+  invents?: number;
   /** 0..1, is the rewrite more likely to get the intended result than the original. */
   improvement?: number;
   passed: boolean;

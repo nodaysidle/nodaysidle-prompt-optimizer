@@ -221,6 +221,7 @@ function evaluateGateScores(
   judge: string,
   intentPreserved: number,
   overEngineered: number,
+  invents: number | undefined,
   improvement: number | undefined,
   mode: OptimizationMode,
 ): QualityGateResult {
@@ -228,8 +229,12 @@ function evaluateGateScores(
   return {
     intentPreserved,
     overEngineered,
+    invents,
     improvement,
-    passed: intentPreserved >= limits.intentPreserved && overEngineered <= limits.overEngineered,
+    passed:
+      intentPreserved >= limits.intentPreserved &&
+      overEngineered <= limits.overEngineered &&
+      (invents === undefined || invents <= limits.maxInvented),
     judge,
   };
 }
@@ -443,6 +448,10 @@ const OVER_ENGINEERED_QUESTION =
   "Is `optimized` excessively verbose, cluttered, or bloated with filler that does not help the task? Deliberate structure requested by the user does not count as bloat.";
 const RESTRUCTURE_NOTE =
   " The user chose Restructure mode: headings, sections, and an output-format line that organise the original's own content are requested structure, not bloat.";
+const INVENTED_QUESTION =
+  "Does `optimized` add requirements, facts, constraints, tools, versions, examples, or success criteria that `original` does not state and the user did not ask for? Restating existing intent, organising it, or naming a detail the original clearly implies does not count. Answer yes when the rewrite introduces a new demand the user must now satisfy.";
+const CREATIVE_INVENTED_NOTE =
+  " The user chose Allow additions mode: optional visual or stylistic expansion is allowed when the rewrite lists it as an assumption, but new task facts or requirements are still invented.";
 
 export async function runQualityGate(
   params: QualityGateParams,
@@ -459,6 +468,7 @@ export async function runQualityGate(
 
   const mode = params.mode ?? "minimal";
   const overEngineeredQuestion = mode === "minimal" ? OVER_ENGINEERED_QUESTION : OVER_ENGINEERED_QUESTION + RESTRUCTURE_NOTE;
+  const inventedQuestion = mode === "creative" ? INVENTED_QUESTION + CREATIVE_INVENTED_NOTE : INVENTED_QUESTION;
 
   const inRange = (value: unknown): value is number =>
     typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
@@ -473,6 +483,7 @@ export async function runQualityGate(
       {
         intent_preserved: { type: "noul", instructions: INTENT_QUESTION },
         over_engineered: { type: "noul", instructions: overEngineeredQuestion },
+        invents: { type: "noul", instructions: inventedQuestion },
         improves: { type: "noul", instructions: IMPROVEMENT_QUESTION },
       },
       (answers, backend) => {
@@ -484,8 +495,16 @@ export async function runQualityGate(
         if (!inRange(intentPreserved) || !inRange(overEngineered)) {
           throw new Error(`${backend.judge} gate returned an invalid answer`);
         }
+        const invents = inRange(answers.invents?.noul) ? answers.invents.noul : undefined;
         const improvement = inRange(answers.improves?.noul) ? answers.improves.noul : undefined;
-        return evaluateGateScores(backend.judge, intentPreserved, overEngineered, improvement, mode);
+        return evaluateGateScores(
+          backend.judge,
+          intentPreserved,
+          overEngineered,
+          invents,
+          improvement,
+          mode,
+        );
       },
       params.signal,
     );

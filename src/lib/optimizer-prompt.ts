@@ -61,7 +61,7 @@ const MODE_GUIDANCE: Record<OptimizationMode, string> = {
 };
 
 const AGENT_READY_GUIDANCE =
-  "MODE structured: rebuild the prompt as an agent-ready brief, using only what the user wrote. Sections, each only if the user gave content for it: Goal, Context, Requirements (one testable item per line), Constraints (hard limits and do-nots), Workflow (only the steps or decision points the user described), Deliverables, Done when (from the user's own success words). Keep every requirement, named tool, version and nuance; drop filler and repetition. Never invent facts, tools, versions or success criteria. If a section the agent needs is missing, ask for it in \"questions\" instead of filling it.";
+  "MODE structured: rebuild the prompt as an agent-ready brief, using only what the user wrote. Sections, each only if the user gave content for it: Goal, Context, Requirements (one testable item per line), Constraints (hard limits and do-nots), Workflow (only the steps or decision points the user described), Deliverables, Done when (from the user's own success words). Put each item in exactly one section: hard limits and do-nots belong only in Constraints, never restated under Requirements or Workflow. Keep every requirement, named tool, version and nuance; drop filler and repetition. Never invent facts, tools, versions or success criteria. If a section the agent needs is missing, ask for it in \"questions\" instead of filling it.";
 
 function engineGuidance(engineTarget?: EngineTarget): string {
   if (!engineTarget || engineTarget === "universal") return "";
@@ -227,6 +227,94 @@ export function findPreservationViolations(rawOriginal: string, optimized: strin
   return [...new Set(violations)].slice(0, 8);
 }
 
+const BRIEF_STOPWORDS = new Set([
+  "a", "about", "after", "all", "also", "an", "and", "any", "are", "as",
+  "at", "away", "be", "before", "by", "do", "every", "existing", "for", "from",
+  "if", "in", "into", "is", "it", "its", "must", "never", "not", "of",
+  "on", "only", "or", "should", "so", "than", "that", "the", "their",
+  "then", "this", "to", "under", "with", "you", "your",
+]);
+const BRIEF_DIRECTIVES = new Set([
+  "add", "allow", "avoid", "change", "continue", "drop", "ensure", "exclude",
+  "include", "keep", "leave", "maintain", "make", "prefer", "prevent",
+  "preserve", "remove", "require", "required", "set", "start", "stay",
+  "stop", "support", "switch", "use",
+]);
+
+interface BriefItem {
+  text: string;
+  tokens: string[];
+}
+
+/**
+ * Normalised content words. Directive verbs are removed so "keep the session
+ * strategy (jwt)" and "do not switch the session strategy away from jwt" compare
+ * as the same item, and `db` is folded to `database`.
+ */
+function briefItem(raw: string): BriefItem | undefined {
+  const text = raw.trim();
+  if (!text || text.length > 500) return undefined;
+  const words = text
+    .toLowerCase()
+    .replace(/\bdb\b/g, "database")
+    .replace(/[^a-z0-9\s-]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .filter((word) => !BRIEF_STOPWORDS.has(word) && !BRIEF_DIRECTIVES.has(word));
+  const tokens = [...new Set(words)];
+  return tokens.length ? { text, tokens } : undefined;
+}
+
+/**
+ * Finds the same item restated under Requirements and Constraints. This is a
+ * high-precision lexical check: it catches the live "db schema" and "jwt session
+ * strategy" repeats, not every possible paraphrase. The prompt rule carries the
+ * semantic case; this is the deterministic backstop that triggers one repair.
+ */
+export function findRepeatedBriefItems(text: string): string[] {
+  const sections: Record<"requirements" | "constraints", BriefItem[]> = {
+    requirements: [],
+    constraints: [],
+  };
+  let current: keyof typeof sections | undefined;
+  for (const line of text.split(/\r?\n/)) {
+    const heading =
+      line.match(/^\s*#{1,6}\s+(.+?)\s*$/) ??
+      line.match(/^\s*\*\*(.+?)\*\*\s*$/);
+    if (heading) {
+      const name = heading[1].toLowerCase().replace(/[^a-z]/g, "");
+      current = name.startsWith("requirements")
+        ? "requirements"
+        : name.startsWith("constraints")
+          ? "constraints"
+          : undefined;
+      continue;
+    }
+    if (!current) continue;
+    const item = line.match(/^\s*(?:[-*•]|\d{1,2}[.)])\s+(.+)$/);
+    if (!item) continue;
+    const parsed = briefItem(item[1]);
+    if (parsed) sections[current].push(parsed);
+  }
+
+  const repeats: string[] = [];
+  for (const requirement of sections.requirements) {
+    for (const constraint of sections.constraints) {
+      if (requirement.tokens.length < 2 || constraint.tokens.length < 2) continue;
+      const shared = requirement.tokens.filter((token) =>
+        constraint.tokens.includes(token),
+      ).length;
+      const union = new Set([...requirement.tokens, ...constraint.tokens]).size;
+      if (shared / union >= 0.85) {
+        repeats.push(
+          `"${requirement.text}" is repeated in Requirements and Constraints`,
+        );
+      }
+    }
+  }
+  return [...new Set(repeats)].slice(0, 6);
+}
+
 /** A rewrite may grow to this many times the original's length (system prompts may restructure more). */
 const LENGTH_CAP: Record<PromptKind, number> = { user: 8, system: 12, image: 8, video: 8 };
 
@@ -338,7 +426,11 @@ export function buildRepairMessages(
   }
   if (repair.gate && !repair.gate.passed) {
     problems.push(
-      `Gate verdicts (model opinion): intent_preserved = ${repair.gate.intentPreserved.toFixed(2)} (pass needs >= ${limits.intentPreserved}), over_engineered = ${repair.gate.overEngineered.toFixed(2)} (pass needs <= ${limits.overEngineered}).`,
+      `Gate verdicts (model opinion): intent_preserved = ${repair.gate.intentPreserved.toFixed(2)} (pass needs >= ${limits.intentPreserved}), over_engineered = ${repair.gate.overEngineered.toFixed(2)} (pass needs <= ${limits.overEngineered})${
+        repair.gate.invents !== undefined
+          ? `, invents = ${repair.gate.invents.toFixed(2)} (pass needs <= ${limits.maxInvented})`
+          : ""
+      }.`,
     );
   }
 

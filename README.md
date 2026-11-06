@@ -14,9 +14,10 @@ your draft
                 MOUSE_API_KEY is set, else Microsoft Decision-1 via OpenRouter
                 (rule-based if none answers)
   -> rewrite    DeepSeek V4.1 Flash or V4 Pro, one JSON rewrite
-  -> verify     built-in checks (quoted text, numbers, code, length, no placeholders)
-                plus the same TypeSafe / Mouse-1 / Decision-1 gate: intent kept,
-                bloat, likely better
+  -> verify     built-in checks (quoted text, numbers, code, length, no placeholders,
+                no repeated brief items) plus the same TypeSafe / Mouse-1 /
+                Decision-1 gate: intent kept, bloat, invented requirements,
+                likely better
   -> repair     one second pass if verification fails
   -> result     edits you keep or revert, or your original if the rewrite did not earn its place
 ```
@@ -25,12 +26,14 @@ The five lamps beside the main button light as the server reports each of those 
 
 ## What the result tells you
 
-- **Checked**: the judge model found your intent kept and no bloat, and the built-in checks passed.
+- **Checked**: the judge model found your intent kept, no bloat, and no invented requirements, and the built-in checks passed.
 - **Needs your review**: something was flagged. It is listed under "Worth a second look".
 - **Original kept**: the rewrite failed verification, or was not clearly better. Your prompt comes back unchanged and you can still read the rejected draft.
 - **Not independently checked**: no judge model was available, so only the built-in checks ran.
 
 Short, clear prompts often come back unchanged. That is a valid result.
+
+In a structured brief, each item belongs in one section. A hard limit goes under Constraints, not under both Requirements and Constraints. A repeat between those two sections triggers one repair; the same check runs again before the result is accepted.
 
 The final prompt is built from the edits you keep and stays editable. If your hand edits drop quoted text, numbers or code from your original, or the reference-photo line, a warning says so.
 

@@ -2,8 +2,10 @@ import {
   DEFAULT_SETTINGS,
   normalizeEngineTarget,
   type AppSettings,
+  type OptimizationMode,
   type PromptHistoryItem,
 } from "./types";
+import { GATE_BY_MODE } from "./gate";
 import { migrateModel, PROFILES } from "./profiles";
 import {
   numberValue,
@@ -223,8 +225,8 @@ export function migrateHistory(value: unknown): PromptHistoryItem[] {
           PROFILES[domain.engineTarget].negative
             ? { negativePrompt: item.negativePrompt.slice(0, 2000) }
             : {}),
-          ...(historicalQuality(item.qualityGate)
-            ? { qualityGate: historicalQuality(item.qualityGate) }
+          ...(historicalQuality(item.qualityGate, domain.mode)
+            ? { qualityGate: historicalQuality(item.qualityGate, domain.mode) }
             : {}),
           ...(item.diagnostics
             ? {
@@ -244,20 +246,33 @@ export function migrateHistory(value: unknown): PromptHistoryItem[] {
     }
   });
 }
-function historicalQuality(value: unknown): PromptHistoryItem["qualityGate"] {
+function historicalQuality(
+  value: unknown,
+  mode: OptimizationMode,
+): PromptHistoryItem["qualityGate"] {
   if (!value) return undefined;
   try {
     const gate = record(value);
     const intentPreserved = numberValue(gate.intentPreserved, 0, 1, "Intent preservation");
     const overEngineered = numberValue(gate.overEngineered, 0, 1, "Bloat");
+    const invents =
+      gate.invents === undefined || gate.invents === null
+        ? undefined
+        : numberValue(gate.invents, 0, 1, "Invented requirements");
+    const limits = GATE_BY_MODE[mode];
     return {
       intentPreserved,
       overEngineered,
+      ...(invents !== undefined ? { invents } : {}),
       ...(gate.improvement !== undefined
         ? { improvement: numberValue(gate.improvement, 0, 1, "Improvement") }
         : {}),
-      // Recomputed from the scores rather than trusted from storage.
-      passed: intentPreserved >= 0.7 && overEngineered <= 0.4,
+      // Recomputed from the scores rather than trusted from storage, with this
+      // item's mode thresholds so a structured run does not flip on reload.
+      passed:
+        intentPreserved >= limits.intentPreserved &&
+        overEngineered <= limits.overEngineered &&
+        (invents === undefined || invents <= limits.maxInvented),
       ...(typeof gate.judge === "string"
         ? { judge: text(gate.judge, "Judge", false, 200) }
         : {}),

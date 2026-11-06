@@ -5,6 +5,7 @@ import {
   enforceIdentityLock,
   findFabricatedPlaceholders,
   findLengthViolation,
+  findRepeatedBriefItems,
   maskCodeBlocks,
   maxRewriteChars,
   trimNearMiss,
@@ -229,6 +230,9 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
       ...(placeholderGuard && isQuestionnairePrompt(optimized)
         ? ["the optimized text is a questionnaire; questions belong in the separate questions field"]
         : []),
+      ...(mode === "structured" && (params.kind === "user" || params.kind === "system")
+        ? findRepeatedBriefItems(optimized)
+        : []),
     ];
     const passed = (gate === undefined || gate.passed) && defects.length === 0;
     return { gate, defects, passed };
@@ -244,6 +248,8 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
   const describeGate = (gate?: QualityGateResult) =>
     gate
       ? `intent ${Math.round(gate.intentPreserved * 100)}%, verbosity risk ${Math.round(gate.overEngineered * 100)}%${
+          gate.invents !== undefined ? `, invented requirements ${Math.round(gate.invents * 100)}%` : ""
+        }${
           gate.improvement !== undefined ? `, improvement ${Math.round(gate.improvement * 100)}%` : ""
         } (${gate.judge ?? "model"})`
       : "deterministic checks only";
@@ -254,6 +260,8 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
     const out: string[] = [];
     if (gate.intentPreserved < limits.intentPreserved) out.push(`intent match only ${Math.round(gate.intentPreserved * 100)}%`);
     if (gate.overEngineered > limits.overEngineered) out.push(`verbosity risk ${Math.round(gate.overEngineered * 100)}%`);
+    if (gate.invents !== undefined && gate.invents > limits.maxInvented)
+      out.push(`invented requirements risk ${Math.round(gate.invents * 100)}%`);
     return out;
   };
 

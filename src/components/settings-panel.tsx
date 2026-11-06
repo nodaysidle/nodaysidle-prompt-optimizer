@@ -519,11 +519,29 @@ export function SettingsPanel({
 }
 
 export function SettingsPageView() {
+  const [dirty, setDirty] = useState(false);
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
   return (
     <main className="settings-page">
-      <Link href="/">Back to workbench</Link>
+      <Link
+        href="/"
+        onClick={(event) => {
+          if (dirty && !window.confirm("Discard unsaved settings?"))
+            event.preventDefault();
+        }}
+      >
+        Back to workbench
+      </Link>
       <h1>Settings</h1>
-      <SettingsContent />
+      <SettingsContent onDirtyChange={setDirty} />
     </main>
   );
 }

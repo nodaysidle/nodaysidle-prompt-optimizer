@@ -90,6 +90,37 @@ describe("optimizePrompt pipeline", () => {
     expect(secondCall.system).toContain("QUALITY REPAIR PASS");
   });
 
+  it("repairs a structured brief that repeats a constraint under Requirements", async () => {
+    const duplicate = `## Requirements
+- Do not change the database schema.
+- Add a regression test.
+## Constraints
+- Do not change the db schema.`;
+    const clean = `## Requirements
+- Add a regression test.
+## Constraints
+- Do not change the database schema.`;
+    mockedChat
+      .mockResolvedValueOnce(responseJson(duplicate))
+      .mockResolvedValueOnce(responseJson(clean));
+    mockedGate.mockResolvedValue({ intentPreserved: 0.95, overEngineered: 0.1, passed: true });
+
+    const result = await optimizePrompt({
+      prompt: "Do not change the database schema. Add a regression test.",
+      kind: "user",
+      mode: "structured",
+      deepseekApiKey: "sk-test",
+      model: "deepseek-v4.1-flash",
+      openrouterApiKey: "sk-or-test",
+    });
+
+    expect(mockedChat).toHaveBeenCalledTimes(2);
+    expect(result.optimized).toBe(clean);
+    expect(mockedChat.mock.calls[1][0].system).toContain(
+      "repeated in Requirements and Constraints",
+    );
+  });
+
   it("preserves the original prompt when repair also fails", async () => {
     const original = "Do a full pass on my landing page copy.";
     mockedChat.mockResolvedValue(responseJson("An expanded corporate-deck rewrite bloated with filler."));

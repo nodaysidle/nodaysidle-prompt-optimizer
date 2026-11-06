@@ -90,11 +90,15 @@ export function ResultNotes({
               ? `Intent kept ${Math.round(gate.intentPreserved * 100)}%, bloat ${Math.round(
                   gate.overEngineered * 100,
                 )}%${
+                  gate.invents !== undefined
+                    ? `, invented requirements ${Math.round(gate.invents * 100)}%`
+                    : ""
+                }${
                   gate.improvement !== undefined
                     ? `, likely better ${Math.round(gate.improvement * 100)}%`
                     : ""
                 } (${gate.judge ?? "judge model"}). These are model opinions, not guarantees.`
-              : "No judge model was available. Only the built-in checks for quoted text, numbers, code and length ran."}
+              : "No judge model was available. Only the built-in checks for quoted text, numbers, code, repeated brief items and length ran."}
           </dd>
           {result.diagnostics && (
             <>

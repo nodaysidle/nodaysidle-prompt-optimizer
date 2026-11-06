@@ -729,6 +729,44 @@ describe("decisions: diagnostics and quality gate", () => {
     expect(await run()).toMatchObject({ passed: false });
     expect(urlOf(fetch.mock.calls[0])).toBe(DECISIONS_URL);
   });
+  it("fails the gate when the judge says the rewrite invents requirements", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      Response.json({
+        answers: {
+          intent_preserved: { noul: 0.9 },
+          over_engineered: { noul: 0.1 },
+          invents: { noul: 0.8 },
+          improves: { noul: 0.8 },
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", fetch);
+    const gate = await runQualityGate({
+      original: "Original",
+      optimized: "Candidate",
+      openrouterKey: "own-openrouter",
+    });
+    expect(gate).toMatchObject({ passed: false, invents: 0.8 });
+  });
+  it("passes when invented-requirements risk is low", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      Response.json({
+        answers: {
+          intent_preserved: { noul: 0.9 },
+          over_engineered: { noul: 0.1 },
+          invents: { noul: 0.2 },
+          improves: { noul: 0.8 },
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", fetch);
+    const gate = await runQualityGate({
+      original: "Original",
+      optimized: "Candidate",
+      openrouterKey: "own-openrouter",
+    });
+    expect(gate).toMatchObject({ passed: true, invents: 0.2 });
+  });
 });
 
 describe("decisions: TypeSafe backend", () => {

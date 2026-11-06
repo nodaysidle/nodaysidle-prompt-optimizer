@@ -4,11 +4,38 @@ import {
   extractVerbatimRequirements,
   findFabricatedPlaceholders,
   findPreservationViolations,
+  findRepeatedBriefItems,
   isQuestionnairePrompt,
   isOnlySubjectPrompt,
   isSubjectInPhotoPrompt,
   parseOptimizationResponse,
 } from "@/lib/optimizer-prompt";
+
+describe("findRepeatedBriefItems", () => {
+  it("flags a constraint restated under Requirements, including db and jwt wording", () => {
+    const brief = `## Requirements
+- Do not change the database schema.
+- Keep the existing session strategy (jwt).
+## Constraints
+- Do not change the db schema.
+- Do not switch the session strategy away from jwt.`;
+    expect(findRepeatedBriefItems(brief)).toHaveLength(2);
+  });
+
+  it("leaves genuinely different sections alone", () => {
+    const brief = `## Requirements
+- Find the root cause.
+- Add a regression test.
+## Constraints
+- Do not change the database schema.
+- Keep the jwt session strategy.`;
+    expect(findRepeatedBriefItems(brief)).toEqual([]);
+  });
+
+  it("ignores text without both sections", () => {
+    expect(findRepeatedBriefItems("- Do not change the db schema.")).toEqual([]);
+  });
+});
 
 describe("findFabricatedPlaceholders", () => {
   it("flags bracketed tokens that were not in the original", () => {

@@ -233,8 +233,23 @@ interface DecisionBackend {
 }
 
 /**
- * Backends in the order they are tried. TypeSafe and Mouse answer the decision question
- * schema; Decision-1 on OpenRouter is the primary cross-engine decision fallback.
+ * TypeSafe's System One API. There is no `/v1/decisions` route: the documented
+ * path is `/v1/systemone`, and `GET /v1/models` lists `jev-latest` and
+ * `jev-preview`. The old path answered 404 and silently fell through, so the
+ * TypeSafe key looked wired while never answering a question.
+ */
+const TYPESAFE_URL = "https://api.typesafe.ai/v1/systemone";
+const TYPESAFE_MODEL = "jev-latest";
+const MOUSE_URL = "https://api.mouse.dev/v1/decisions";
+const MOUSE_MODEL = "mouse-1";
+const OPENROUTER_DECISIONS_URL = "https://openrouter.ai/api/alpha/decisions";
+const DECISION1_MODEL = "microsoft/microsoft-decision-1";
+
+/**
+ * Backends in the order they are tried. TypeSafe is the calibrated System One
+ * judge, Mouse is the fast hot-path fallback, and Decision-1 on OpenRouter is the
+ * cross-engine fallback. A backend that errors or returns an invalid answer is
+ * skipped; a cancelled request is never retried on the next one.
  */
 function decisionBackends(
   typesafeKey?: string,
@@ -245,8 +260,8 @@ function decisionBackends(
   const tsKey = typesafeKey?.trim();
   if (tsKey)
     backends.push({
-      url: "https://api.typesafe.ai/v1/decisions",
-      model: "jev-preview",
+      url: TYPESAFE_URL,
+      model: TYPESAFE_MODEL,
       judge: "TypeSafe-Jev",
       apiKey: tsKey,
       timeout: 4000,
@@ -254,8 +269,8 @@ function decisionBackends(
   const mKey = mouseKey?.trim();
   if (mKey)
     backends.push({
-      url: "https://api.mouse.dev/v1/decisions",
-      model: "mouse-1",
+      url: MOUSE_URL,
+      model: MOUSE_MODEL,
       judge: "Mouse-1",
       apiKey: mKey,
       timeout: 3000,
@@ -263,8 +278,8 @@ function decisionBackends(
   const orKey = openrouterKey?.trim();
   if (orKey)
     backends.push({
-      url: "https://openrouter.ai/api/alpha/decisions",
-      model: "microsoft/microsoft-decision-1",
+      url: OPENROUTER_DECISIONS_URL,
+      model: DECISION1_MODEL,
       judge: "Microsoft-Decision-1",
       apiKey: orKey,
       timeout: 6000,

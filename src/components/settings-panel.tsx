@@ -225,9 +225,10 @@ function SettingsFields({ form }: { form: SettingsForm }) {
         </p>
         {field("openrouterApiKey", "OpenRouter API key", "openrouter")}
         <p className="help">
-          Adds Microsoft Decision-1 checks: intent kept, bloat, and whether the
-          rewrite is better. Without it, the draft read is rule-based and
-          rewrites are not independently checked.
+          Adds Decision-1 checks when no server decisions key is active: intent
+          kept, bloat, and whether the rewrite is better. The server tries
+          TypeSafe, then Mouse-1, then Decision-1. With none of them, the draft
+          read is rule-based and rewrites are not independently checked.
         </p>
       </section>
 
@@ -316,17 +317,18 @@ function SettingsFields({ form }: { form: SettingsForm }) {
       <details className="settings-disclosure">
         <summary>How your data is handled</summary>
         <p className="help">
-          Default diagnosis sends your draft to this app&apos;s server for
-          heuristics, with no AI-provider transmission. Rewrites and text
-          evaluations send prompts and credentials through this app&apos;s
-          server to DeepSeek. AI-provider diagnostics send prompt data to the
-          provider you selected.
+          Diagnosis sends your draft to this app&apos;s server. With an owner
+          token it may go to TypeSafe, Mouse-1, or Decision-1; with an OpenRouter
+          key it goes to Decision-1. With no decisions key it stays on this server as a
+          rule-based estimate, with no AI-provider transmission. Rewrites and
+          text evaluations send prompts and credentials through this app&apos;s
+          server to DeepSeek.
         </p>
         <p className="help">
-          Remembered keys are plaintext and accessible to scripts on this
-          origin. The shared owner token is never remembered. Legacy saved
-          credentials stay untouched until you explicitly forget them;
-          importing is session-only. Old model aliases migrate to Flash and Pro.
+          Remembered provider keys and a remembered owner token are plaintext
+          and accessible to scripts on this origin. Legacy saved credentials
+          stay untouched until you explicitly forget them; importing is
+          session-only. Old model aliases migrate to Flash and Pro.
         </p>
       </details>
 

@@ -7,6 +7,7 @@ import {
   resolveKey,
   resolveOptionalMouseKey,
   resolveOptionalOpenrouterKey,
+  resolveOptionalTypesafeKey,
   serverConfig,
   throttle,
 } from "@/lib/server/access";
@@ -19,6 +20,7 @@ import { readBody } from "@/lib/server/route";
 
 const DECISIONS_URL = "https://openrouter.ai/api/alpha/decisions";
 const MOUSE_URL = "https://api.mouse.dev/v1/decisions";
+const TYPESAFE_URL = "https://api.typesafe.ai/v1/systemone";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 
@@ -100,10 +102,17 @@ describe("every owner-funded access boundary", () => {
       ).toBe("own-key");
     },
   );
-  it("the retired TypeSafe provider is gone from access and config", () => {
+  it("TypeSafe is a decisions key, not a chat provider", () => {
     expect(() =>
       resolveKey(request({}, { "x-typesafe-key": "k" }), "typesafe" as never),
     ).toThrow();
+    vi.stubEnv("TYPESAFE_API_KEY", " apikey_server ");
+    expect(resolveOptionalTypesafeKey(request({}))).toBeUndefined();
+    expect(
+      resolveOptionalTypesafeKey(
+        request({}, { "x-app-access-token": "owner-token" }),
+      ),
+    ).toBe("apikey_server");
     expect(Object.keys(serverConfig()).sort()).toEqual([
       "deepseek",
       "openrouter",
@@ -695,6 +704,55 @@ describe("decisions: diagnostics and quality gate", () => {
   });
 });
 
+describe("decisions: TypeSafe backend", () => {
+  const diagnosis = () =>
+    Response.json({
+      answers: {
+        clarity: { score: 2 },
+        is_ambiguous: { noul: 0.2 },
+        lacks_constraints: { noul: 0.3 },
+        injection_risk: { noul: 0 },
+      },
+    });
+
+  it("asks the documented System One endpoint with jev-latest", async () => {
+    const fetch = vi.fn().mockResolvedValue(diagnosis());
+    vi.stubGlobal("fetch", fetch);
+    const result = await runDiagnostics({
+      prompt: "Translate hello into French.",
+      kind: "user",
+      typesafeKey: "apikey_test",
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(urlOf(fetch.mock.calls[0])).toBe(TYPESAFE_URL);
+    expect(authOf(fetch.mock.calls[0])).toBe("Bearer apikey_test");
+    const body = bodyOf(fetch.mock.calls[0]);
+    expect(body.model).toBe("jev-latest");
+    expect(body.state).toEqual({ prompt: "Translate hello into French." });
+    expect(body.questions.clarity.type).toBe("score");
+    expect(body.questions.suggested_kind.type).toBe("choice");
+    expect(result).toMatchObject({ engine: "jev-latest", clarityScore: 2 });
+    expect(result.heuristic).toBeFalsy();
+  });
+
+  it("falls back to Mouse when TypeSafe fails", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("upstream", { status: 500 }))
+      .mockResolvedValueOnce(diagnosis());
+    vi.stubGlobal("fetch", fetch);
+    const result = await runDiagnostics({
+      prompt: "Translate hello into French.",
+      kind: "user",
+      typesafeKey: "apikey_test",
+      mouseKey: "sk_mouse_test",
+    });
+    expect(urlOf(fetch.mock.calls[0])).toBe(TYPESAFE_URL);
+    expect(urlOf(fetch.mock.calls[1])).toBe(MOUSE_URL);
+    expect(result.engine).toBe("mouse-1");
+  });
+});
+
 describe("decisions: Mouse-1 backend", () => {
   const diagnosis = () =>
     Response.json({
@@ -811,6 +869,73 @@ describe("decisions: Mouse-1 backend", () => {
     });
     expect(urlOf(fetch.mock.calls[1])).toBe(DECISIONS_URL);
     expect(result).toMatchObject({ judge: "Microsoft-Decision-1" });
+  });
+});
+
+describe("API routes wire every owner-funded decisions key", () => {
+  const diagnosis = () =>
+    Response.json({
+      answers: {
+        clarity: { score: 2 },
+        is_ambiguous: { noul: 0.2 },
+        lacks_constraints: { noul: 0.3 },
+        injection_risk: { noul: 0 },
+      },
+    });
+  const gate = () =>
+    Response.json({
+      answers: {
+        intent_preserved: { noul: 0.9 },
+        over_engineered: { noul: 0.1 },
+        improves: { noul: 0.8 },
+      },
+    });
+  const owner = { "x-app-access-token": "owner-token" };
+
+  it("diagnose uses the server's Mouse key when TypeSafe is absent", async () => {
+    vi.stubEnv("MOUSE_API_KEY", "server-mouse");
+    const fetch = vi.fn().mockResolvedValue(diagnosis());
+    vi.stubGlobal("fetch", fetch);
+    const response = await diagnose(
+      request({ prompt: "Translate hello into French." }, owner),
+    );
+    expect(response.status).toBe(200);
+    expect(urlOf(fetch.mock.calls[0])).toBe(MOUSE_URL);
+    expect(authOf(fetch.mock.calls[0])).toBe("Bearer server-mouse");
+  });
+
+  it("diagnose uses the server's TypeSafe key first", async () => {
+    vi.stubEnv("TYPESAFE_API_KEY", "server-typesafe");
+    vi.stubEnv("MOUSE_API_KEY", "server-mouse");
+    const fetch = vi.fn().mockResolvedValue(diagnosis());
+    vi.stubGlobal("fetch", fetch);
+    const response = await diagnose(
+      request({ prompt: "Translate hello into French." }, owner),
+    );
+    expect(response.status).toBe(200);
+    expect(urlOf(fetch.mock.calls[0])).toBe(TYPESAFE_URL);
+    expect(authOf(fetch.mock.calls[0])).toBe("Bearer server-typesafe");
+    expect(bodyOf(fetch.mock.calls[0]).model).toBe("jev-latest");
+  });
+
+  it("optimize uses Mouse for diagnostics and the quality gate", async () => {
+    vi.stubEnv("MOUSE_API_KEY", "server-mouse");
+    const prompt = "Translate hello into French.";
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(diagnosis())
+      .mockResolvedValueOnce(completion(rewrite(prompt)))
+      .mockResolvedValueOnce(gate());
+    vi.stubGlobal("fetch", fetch);
+    const response = await optimize(
+      request({ prompt, kind: "user" }, owner),
+    );
+    expect(response.status).toBe(200);
+    expect(urlOf(fetch.mock.calls[0])).toBe(MOUSE_URL);
+    expect(urlOf(fetch.mock.calls[1])).toBe(OPENROUTER_URL);
+    expect(urlOf(fetch.mock.calls[2])).toBe(MOUSE_URL);
+    const result = (await response.json()) as { optimized?: string };
+    expect(result.optimized).toBe(prompt);
   });
 });
 

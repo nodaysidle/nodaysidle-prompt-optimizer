@@ -1,6 +1,10 @@
 import { optimizePrompt, type Stage } from "@/lib/providers/chat";
 import { validateDomain } from "@/lib/validation";
-import { resolveChatKeys, resolveOptionalTypesafeKey } from "@/lib/server/access";
+import {
+  resolveChatKeys,
+  resolveOptionalMouseKey,
+  resolveOptionalTypesafeKey,
+} from "@/lib/server/access";
 import { readBody, routeError } from "@/lib/server/route";
 
 const NO_STORE = { "Cache-Control": "no-store" };
@@ -14,6 +18,7 @@ export async function POST(req: Request) {
     const domain = validateDomain(await readBody(req));
     const keys = resolveChatKeys(req);
     const typesafeApiKey = resolveOptionalTypesafeKey(req);
+    const mouseApiKey = resolveOptionalMouseKey(req);
     const run = (onStage?: (stage: Stage) => void) =>
       optimizePrompt({
         prompt: domain.prompt,
@@ -24,6 +29,7 @@ export async function POST(req: Request) {
         deepseekApiKey: keys.deepseekApiKey,
         openrouterApiKey: keys.openrouterApiKey,
         typesafeApiKey,
+        mouseApiKey,
         signal: req.signal,
         onStage,
       });

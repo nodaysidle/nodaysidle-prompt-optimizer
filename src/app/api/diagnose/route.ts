@@ -1,6 +1,10 @@
 import { runDiagnostics } from "@/lib/decisions";
 import { validateDomain } from "@/lib/validation";
-import { resolveOptionalOpenrouterKey, resolveOptionalTypesafeKey } from "@/lib/server/access";
+import {
+  resolveOptionalMouseKey,
+  resolveOptionalOpenrouterKey,
+  resolveOptionalTypesafeKey,
+} from "@/lib/server/access";
 import { readBody, routeError } from "@/lib/server/route";
 
 export async function POST(req: Request) {
@@ -11,6 +15,7 @@ export async function POST(req: Request) {
         prompt: domain.prompt,
         kind: domain.kind,
         typesafeKey: resolveOptionalTypesafeKey(req),
+        mouseKey: resolveOptionalMouseKey(req),
         openrouterKey: resolveOptionalOpenrouterKey(req),
         signal: req.signal,
       }),

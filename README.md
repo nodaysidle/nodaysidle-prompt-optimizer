@@ -10,11 +10,13 @@ Live: https://nodaysidle-prompt-optimizer.vercel.app
 
 ```text
 your draft
-  -> diagnose   Mouse-1 reads it if MOUSE_API_KEY is set, else Microsoft Decision-1 via
-                OpenRouter (rule-based if neither answers)
+  -> diagnose   TypeSafe Jev reads it if TYPESAFE_API_KEY is set, else Mouse-1 if
+                MOUSE_API_KEY is set, else Microsoft Decision-1 via OpenRouter
+                (rule-based if none answers)
   -> rewrite    DeepSeek V4.1 Flash or V4 Pro, one JSON rewrite
   -> verify     built-in checks (quoted text, numbers, code, length, no placeholders)
-                plus a Mouse-1 or Decision-1 gate: intent kept, bloat, likely better
+                plus the same TypeSafe / Mouse-1 / Decision-1 gate: intent kept,
+                bloat, likely better
   -> repair     one second pass if verification fails
   -> result     edits you keep or revert, or your original if the rewrite did not earn its place
 ```
@@ -37,7 +39,7 @@ The final prompt is built from the edits you keep and stays editable. If your ha
 - Bring your own DeepSeek or OpenRouter key in Settings. Keys stay in this browser tab unless you choose to remember them, and then they are stored in plaintext in this browser.
 - Your prompt goes from the browser to this app's server and on to the provider you chose. History and settings stay in your browser.
 - The server's own keys are used only when the caller sends a valid `x-app-access-token` that matches `APP_ACCESS_TOKEN`. Without that variable set, only bring-your-own keys work.
-- Diagnostics use the OpenRouter key you supplied. With no OpenRouter key they run as a rule-based estimate and the result says so.
+- Diagnostics try the server's TypeSafe key, then Mouse-1, then Decision-1 via OpenRouter when the caller has the owner token. With a bring-your-own OpenRouter key they use Decision-1. With no decisions key at all they run as a rule-based estimate and the result says so.
 - No analytics. No accounts.
 
 ## Run it locally
@@ -76,7 +78,7 @@ node --env-file=.env.local evals/judge.ts --base http://127.0.0.1:3000 --out jud
 ## Where things live
 
 - `src/lib/providers/chat.ts`: the pipeline above.
-- `src/lib/decisions.ts`: diagnostics and the quality gate (Mouse-1, then Decision-1), and the rule-based fallback.
+- `src/lib/decisions.ts`: diagnostics and the quality gate (TypeSafe, then Mouse-1, then Decision-1), and the rule-based fallback.
 - `src/lib/optimizer-prompt.ts`: prompts, strict response parsing, preservation checks.
 - `src/lib/providers/completion.ts`: OpenRouter first, DeepSeek direct as fallback, with a deadline, abort, size cap and strict response schema.
 - `src/lib/redline.ts`: turns the original and the rewrite into keep-or-revert edits.

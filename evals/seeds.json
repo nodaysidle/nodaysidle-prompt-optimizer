@@ -142,5 +142,195 @@
       ],
       "noQuestionnaire": true
     }
+  },
+  {
+    "name": "target-gpt-image-poster",
+    "kind": "image",
+    "engineTarget": "gpt-image",
+    "prompt": "poster for a coffee shop called 'Night Owl', cozy, owl logo, the text 'OPEN LATE' at the bottom, vertical",
+    "expect": {
+      "mustRewrite": true,
+      "containsAll": [
+        "Night Owl",
+        "OPEN LATE",
+        "vertical"
+      ]
+    }
+  },
+  {
+    "name": "target-gpt-image-edit",
+    "kind": "image",
+    "engineTarget": "gpt-image",
+    "prompt": "change the background of my photo to a beach at sunset, keep me the same",
+    "expect": {
+      "mustRewrite": true,
+      "containsAll": [
+        "beach",
+        "sunset"
+      ]
+    }
+  },
+  {
+    "name": "target-gpt-image-likeness",
+    "kind": "image",
+    "engineTarget": "gpt-image",
+    "prompt": "The subject in the photo sitting in a sunlit cafe reading a book"
+  },
+  {
+    "name": "target-nano-banana-poster",
+    "kind": "image",
+    "engineTarget": "nano-banana",
+    "prompt": "poster for a coffee shop called 'Night Owl', cozy, owl logo, the text 'OPEN LATE' at the bottom, vertical",
+    "expect": {
+      "mustRewrite": true,
+      "containsAll": [
+        "Night Owl",
+        "OPEN LATE",
+        "vertical"
+      ]
+    }
+  },
+  {
+    "name": "target-nano-banana-likeness",
+    "kind": "image",
+    "engineTarget": "nano-banana",
+    "prompt": "The subject in the photo walking through a rainy tokyo street at night"
+  },
+  {
+    "name": "target-veo-dog-dialogue",
+    "kind": "video",
+    "engineTarget": "veo",
+    "prompt": "a dog runs on the beach and catches a frisbee, slow motion, the owner shouts 'good boy!'",
+    "expect": {
+      "mustRewrite": true,
+      "containsAll": [
+        "good boy"
+      ],
+      "lacksAny": [
+        "[SCENE",
+        "[TEMPORAL",
+        "[CAMERA PATH",
+        "[NEGATIVE"
+      ]
+    }
+  },
+  {
+    "name": "target-veo-ad",
+    "kind": "video",
+    "engineTarget": "veo",
+    "prompt": "product ad for a perfume bottle, 15 seconds, three shots, ends with the text 'AURA' on screen, soft piano music",
+    "expect": {
+      "containsAll": [
+        "AURA",
+        "15"
+      ],
+      "lacksAny": [
+        "[SCENE",
+        "[TEMPORAL",
+        "[CAMERA PATH",
+        "[NEGATIVE"
+      ]
+    }
+  },
+  {
+    "name": "target-veo-likeness",
+    "kind": "video",
+    "engineTarget": "veo",
+    "prompt": "The subject from the photo walks slowly along a foggy pier at dawn, then turns toward the camera and smiles",
+    "expect": {
+      "lacksAny": [
+        "[SCENE",
+        "[TEMPORAL",
+        "[CAMERA PATH",
+        "[NEGATIVE"
+      ]
+    }
+  },
+  {
+    "name": "target-omni-1.2-ad",
+    "kind": "video",
+    "engineTarget": "omni-1.2",
+    "prompt": "product ad for a perfume bottle, 15 seconds, three shots, ends with the text 'AURA' on screen, soft piano music",
+    "expect": {
+      "containsAll": [
+        "AURA",
+        "15"
+      ],
+      "lacksAny": [
+        "[SCENE",
+        "[TEMPORAL",
+        "[CAMERA PATH",
+        "[NEGATIVE",
+        "<IMAGE_REF"
+      ]
+    }
+  },
+  {
+    "name": "target-omni-1.2-likeness",
+    "kind": "video",
+    "engineTarget": "omni-1.2",
+    "prompt": "The subject from the photo walks slowly along a foggy pier at dawn, then turns toward the camera and smiles",
+    "expect": {
+      "lacksAny": [
+        "[SCENE",
+        "[TEMPORAL",
+        "[CAMERA PATH",
+        "[NEGATIVE"
+      ]
+    }
+  },
+  {
+    "name": "target-omni-1.1-dog",
+    "kind": "video",
+    "engineTarget": "omni",
+    "prompt": "a dog runs on the beach and catches a frisbee, slow motion, the owner shouts 'good boy!'",
+    "expect": {
+      "mustRewrite": true,
+      "containsAll": [
+        "good boy"
+      ],
+      "lacksAny": [
+        "[SCENE",
+        "[TEMPORAL",
+        "[CAMERA PATH",
+        "[NEGATIVE",
+        "@Image"
+      ]
+    }
+  },
+  {
+    "name": "target-general-video-dog",
+    "kind": "video",
+    "engineTarget": "universal",
+    "prompt": "a dog runs on the beach and catches a frisbee, slow motion, the owner shouts 'good boy!'",
+    "expect": {
+      "mustRewrite": true,
+      "containsAll": [
+        "good boy"
+      ],
+      "lacksAny": [
+        "[SCENE",
+        "[TEMPORAL",
+        "[CAMERA PATH",
+        "[NEGATIVE"
+      ]
+    }
+  },
+  {
+    "name": "system-conflict-not-resolved",
+    "kind": "system",
+    "prompt": "You are a customer support bot for Acme Bikes. answer questions about orders. be nice. dont give refunds over 100 dollars, escalate those to a human. always answer in JSON. also be casual and use markdown",
+    "expect": {
+      "containsAll": [
+        "JSON",
+        "markdown",
+        "100"
+      ],
+      "lacksAny": [
+        "entire response",
+        "no text outside",
+        "only JSON"
+      ]
+    }
   }
 ]

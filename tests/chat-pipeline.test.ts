@@ -173,9 +173,9 @@ describe("optimizePrompt pipeline", () => {
       openrouterApiKey: "sk-or-test",
     });
 
-    expect(result.optimized.startsWith("Use photo in the attachment")).toBe(true);
+    expect(result.optimized.startsWith("Use the photo in the attachment")).toBe(true);
     // The gate judges against the locked original, so the lock itself isn't scored as drift.
-    expect(mockedGate.mock.calls[0][0].original.startsWith("Use photo in the attachment")).toBe(true);
+    expect(mockedGate.mock.calls[0][0].original.startsWith("Use the photo in the attachment")).toBe(true);
   });
 
   it("returns the multi-reference lock for a subject-only Omni 1.2 prompt", async () => {
@@ -291,6 +291,30 @@ describe("optimizePrompt pipeline", () => {
       openrouterApiKey: "sk-or-test",
     });
 
+    expect(result.unresolvedQuestions).toEqual(["Which audience is the email for?"]);
+  });
+
+  it("keeps the rewriter's specific questions when the draft is rejected", async () => {
+    mockedDiagnostics.mockResolvedValue({
+      ...baseDiagnostics,
+      unresolvedQuestions: ["What specific outcome makes this task a success?"],
+    });
+    mockedChat.mockResolvedValue(
+      completion(
+        JSON.stringify({ optimized: "A rewrite.", questions: ["Which audience is the email for?"], summary: "s", changes: ["c"] }),
+      ),
+    );
+    mockedGate.mockResolvedValue({ intentPreserved: 0.4, overEngineered: 0.1, passed: false });
+
+    const result = await optimizePrompt({
+      prompt: "Write the email.",
+      kind: "user",
+      deepseekApiKey: "sk-test",
+      model: "deepseek-v4.1-flash",
+      openrouterApiKey: "sk-or-test",
+    });
+
+    expect(result.rejectedDraft).toBeDefined();
     expect(result.unresolvedQuestions).toEqual(["Which audience is the email for?"]);
   });
 

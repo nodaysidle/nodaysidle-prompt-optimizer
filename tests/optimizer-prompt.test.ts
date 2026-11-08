@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { ENGINE_TARGETS } from "@/lib/types";
 import {
+  LEGACY_IDENTITY_LOCK,
+  buildOptimizerMessages,
   enforceIdentityLock,
   extractVerbatimRequirements,
   findFabricatedPlaceholders,
@@ -10,6 +13,7 @@ import {
   isOnlySubjectPrompt,
   isSubjectInPhotoPrompt,
   parseOptimizationResponse,
+  startsWithIdentityLock,
 } from "@/lib/optimizer-prompt";
 
 describe("findRepeatedBriefItems", () => {
@@ -125,7 +129,14 @@ describe("parseOptimizationResponse", () => {
     const raw = JSON.stringify({ optimized: "A dragon over Paris", summary: "s", changes: [], negativePrompt: "blur" });
     expect(parseOptimizationResponse(raw, "image", undefined, "universal").negativePrompt).toBe("blur");
     expect(parseOptimizationResponse(raw, "image", undefined, "nano-banana").negativePrompt).toBeUndefined();
-    expect(parseOptimizationResponse(raw, "video", undefined, "veo").negativePrompt).toBeUndefined();
+    expect(parseOptimizationResponse(raw, "video", undefined, "veo").negativePrompt).toBe("blur");
+    expect(parseOptimizationResponse(raw, "video", undefined, "omni-1.2").negativePrompt).toBeUndefined();
+  });
+
+  it("asks for the negative prompt inside the JSON object", () => {
+    const { system } = buildOptimizerMessages("a dog on a beach", "video", undefined, "veo");
+    const schema = system.slice(system.indexOf("{\n  \"optimized\""));
+    expect(schema.indexOf('"negativePrompt"')).toBeLessThan(schema.indexOf("\n}"));
   });
 
   it("supplies the default negative prompt for image kind", () => {
@@ -166,22 +177,44 @@ describe("identity lock helpers", () => {
 
   it("enforces the identity lock prefix for image results", () => {
     const enforced = enforceIdentityLock("a sunny portrait", "image");
-    expect(enforced.startsWith(enforceIdentityLock("x", "image").slice(0, 4))).toBe(true);
-    const locked = enforceIdentityLock(
-      "Use photo in the attachment as only reference. Identity lock: exact likeness, facial geometry / proportions.",
-      "image",
+    expect(enforced).toBe(`${identityLockFor("universal")} a sunny portrait`);
+    expect(enforceIdentityLock(identityLockFor("universal"), "image")).toBe(identityLockFor("universal"));
+  });
+
+  it("gives every target its own likeness line", () => {
+    const lines = ENGINE_TARGETS.map((target) => identityLockFor(target));
+    expect(new Set(lines).size).toBe(ENGINE_TARGETS.length);
+    expect(identityLockFor("omni-1.2")).toContain("attached reference images");
+    expect(identityLockFor("gpt-image")).toMatch(/^Image 1 is the identity reference/);
+    for (const target of ["nano-banana", "gpt-image", "veo", "omni", "omni-1.2"] as const)
+      expect(identityLockFor(target)).not.toContain("only reference");
+    const locked = enforceIdentityLock("a sunny portrait", "image", "omni-1.2");
+    expect(locked.startsWith("Use the attached reference images")).toBe(true);
+  });
+
+  it("replaces a legacy or model-written lock instead of stacking a second one", () => {
+    const legacy = `${LEGACY_IDENTITY_LOCK} A woman on a rooftop at dusk.`;
+    expect(enforceIdentityLock(legacy, "image", "nano-banana")).toBe(
+      `${identityLockFor("nano-banana")} A woman on a rooftop at dusk.`,
     );
-    expect(locked).toBe(
-      "Use photo in the attachment as only reference. Identity lock: exact likeness, facial geometry / proportions.",
+    const variation =
+      "Use the attached photo as the reference for the subject's identity. Keep the subject's face exactly the same. The subject walks along a pier.";
+    expect(enforceIdentityLock(variation, "video", "veo")).toBe(
+      `${identityLockFor("veo")} The subject walks along a pier.`,
     );
   });
 
-  it("uses multi-reference wording for Omni 1.2", () => {
-    expect(identityLockFor("omni-1.2")).toContain("attached reference images");
-    expect(identityLockFor("veo")).toContain("only reference");
-    const locked = enforceIdentityLock("a sunny portrait", "image", "omni-1.2");
-    expect(locked.startsWith("Use the attached reference images")).toBe(true);
-    expect(locked).not.toContain("only reference");
+  it("never strips a scene sentence that only follows the lock", () => {
+    const text = "Use the attached photo as the identity reference. Keep the camera steady. The subject waves.";
+    expect(enforceIdentityLock(text, "image", "nano-banana")).toBe(
+      `${identityLockFor("nano-banana")} Keep the camera steady. The subject waves.`,
+    );
+  });
+
+  it("accepts the legacy lock line in saved history", () => {
+    expect(startsWithIdentityLock(`${LEGACY_IDENTITY_LOCK} x`, "veo")).toBe(true);
+    expect(startsWithIdentityLock(`${identityLockFor("veo")} x`, "veo")).toBe(true);
+    expect(startsWithIdentityLock("A dog on a beach", "veo")).toBe(false);
   });
 });
 

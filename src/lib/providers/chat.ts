@@ -292,7 +292,7 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
       diagnostics,
       qualityGate: gate,
       suggestedKind: resolveSuggestedKind(diagnostics, params.kind),
-      unresolvedQuestions: diagnostics.unresolvedQuestions ?? [],
+      unresolvedQuestions: mergeUnresolvedQuestions(diagnostics.unresolvedQuestions, draft.questions),
       completion: draft.completion,
       rejectedDraft: {
         optimized: draft.optimized,
@@ -331,8 +331,9 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
   };
 
   const accept = (draft: ParsedRewrite, gate?: QualityGateResult): OptimizationResult => {
-    const warnings = preservationWarnings(params.prompt, draft.optimized, mode);
-    if (mode !== "creative" && draft.assumptions.length)
+    const warnings = preservationWarnings(params.prompt, draft.optimized, mode, params.engineTarget);
+    // Image and video rewrites add visual craft by design; only text prompts flag listed assumptions.
+    if (mode !== "creative" && !isImageOrVideo && draft.assumptions.length)
       warnings.push("The rewrite listed assumptions outside creative mode. Review these additions.");
     return {
       optimized: draft.optimized,

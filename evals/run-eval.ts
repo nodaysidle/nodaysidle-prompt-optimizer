@@ -11,12 +11,15 @@ interface SeedExpectations {
   noBrackets?: boolean;
   noQuestionnaire?: boolean;
   allowPreservedOriginal?: boolean;
+  /** The rewrite must come back changed: an "Original kept" result fails the seed. */
+  mustRewrite?: boolean;
 }
 
 interface Seed {
   name: string;
   kind: string;
   mode?: string;
+  engineTarget?: string;
   prompt: string;
   expect?: SeedExpectations;
 }
@@ -36,8 +39,21 @@ interface CheckResult {
   detail: string;
 }
 
-const IDENTITY_LOCK_OUTPUT =
-  "Use photo in the attachment as only reference. Identity lock: exact likeness, facial geometry / proportions.";
+/** Keep in sync with identityLockFor in src/lib/optimizer-prompt.ts; tests/eval-sync.test.ts checks it. */
+const IDENTITY_LOCKS: Record<string, string> = {
+  universal:
+    "Use the photo in the attachment as the only reference. Identity lock: exact likeness, facial geometry and proportions.",
+  "nano-banana":
+    "Use the attached photo as the identity reference for the subject. Keep the subject's face, facial features and proportions exactly the same as in the photo.",
+  "gpt-image":
+    "Image 1 is the identity reference for the subject. Keep the subject's face, facial features and proportions exactly the same as in Image 1.",
+  veo:
+    "Use the attached reference image as the subject reference. Keep the subject's face, facial features and proportions exactly as in the reference throughout the shot.",
+  omni:
+    "Use the attached image as the identity reference for the subject. Keep the subject's face, hair and build consistent throughout the video.",
+  "omni-1.2":
+    "Use the attached reference images as identity references. Keep each referenced subject's face, hair, build, and clothing consistent across shots. Do not treat the references as literal frames unless the prompt asks for that.",
+};
 
 const POLISH_DIACRITICS = /[ąćęłńóśźż]/i;
 
@@ -112,10 +128,11 @@ function runChecks(seed: Seed, response: OptimizeResponse): CheckResult[] {
 
   if (seed.kind === "image" || seed.kind === "video") {
     if (/^the subject (?:in|from) the photo/i.test(seed.prompt.trim())) {
+      const lock = IDENTITY_LOCKS[seed.engineTarget ?? "universal"];
       checks.push({
         name: "identity-lock",
-        ok: optimized.startsWith(IDENTITY_LOCK_OUTPUT),
-        detail: optimized.startsWith(IDENTITY_LOCK_OUTPUT) ? "lock present" : "identity lock prefix MISSING",
+        ok: optimized.startsWith(lock),
+        detail: optimized.startsWith(lock) ? "lock present" : "identity lock prefix MISSING",
       });
     }
     checks.push({
@@ -148,7 +165,7 @@ async function main() {
   let latencyTotal = 0;
 
   for (const seed of seeds) {
-    process.stdout.write(`· ${seed.name} [${seed.kind}] ... `);
+    process.stdout.write(`· ${seed.name} [${seed.kind}${seed.engineTarget ? `/${seed.engineTarget}` : ""}] ... `);
     let response: OptimizeResponse = {};
     const startedAt = Date.now();
     try {
@@ -157,9 +174,14 @@ async function main() {
         headers: {
           "Content-Type": "application/json",
           // Run with --env-file to use your own key; without it the server must hold shared keys.
-          ...(process.env.OPENROUTER_API_KEY ? { "x-openrouter-key": process.env.OPENROUTER_API_KEY } : {}),
+          // The access token runs the full judge chain, as the internal app does; otherwise use your own key.
+          ...(process.env.APP_ACCESS_TOKEN
+            ? { "x-app-access-token": process.env.APP_ACCESS_TOKEN }
+            : process.env.OPENROUTER_API_KEY
+              ? { "x-openrouter-key": process.env.OPENROUTER_API_KEY }
+              : {}),
         },
-        body: JSON.stringify({ prompt: seed.prompt, kind: seed.kind, mode: seed.mode }),
+        body: JSON.stringify({ prompt: seed.prompt, kind: seed.kind, mode: seed.mode, engineTarget: seed.engineTarget }),
       });
       const elapsed = Date.now() - startedAt;
       latencyTotal += elapsed;
@@ -173,6 +195,12 @@ async function main() {
     } catch (err) {
       console.log(`request failed: ${err instanceof Error ? err.message : String(err)}`);
       failures.push(`${seed.name}: request failed`);
+      continue;
+    }
+
+    if (seed.expect?.mustRewrite && (response.optimized ?? "").trim() === seed.prompt.trim()) {
+      console.log("FAIL: original kept, the rewrite was rejected");
+      failures.push(`${seed.name}: original kept`);
       continue;
     }
 

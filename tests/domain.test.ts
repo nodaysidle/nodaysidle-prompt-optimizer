@@ -92,9 +92,13 @@ describe("preservation and response boundaries", () => {
       '"negativePrompt":"bad","changes"',
     );
     expect(
-      parseOptimizationResponse(withNegative, "video", "A bird", "veo")
+      parseOptimizationResponse(withNegative, "video", "A bird", "omni-1.2")
         .negativePrompt,
     ).toBeUndefined();
+    expect(
+      parseOptimizationResponse(withNegative, "video", "A bird", "veo")
+        .negativePrompt,
+    ).toBe("bad");
     expect(
       parseOptimizationResponse(withNegative, "user").negativePrompt,
     ).toBeUndefined();
@@ -194,19 +198,15 @@ describe("type-aware rules and profiles", () => {
     expect(image.issues.join(" ")).not.toMatch(/persona|camera behavior/i);
   });
   it("only the engines that support a separate negative field offer one", () => {
+    // Veo's API has negativePrompt; Nano Banana, GPT Image and Omni do not.
     expect(PROFILES.universal.negative).toBe(true);
-    for (const target of [
-      "nano-banana",
-      "gpt-image",
-      "veo",
-      "omni",
-      "omni-1.2",
-    ] as const)
+    expect(PROFILES.veo.negative).toBe(true);
+    for (const target of ["nano-banana", "gpt-image", "omni", "omni-1.2"] as const)
       expect(PROFILES[target].negative).toBe(false);
     expect(PROFILES["omni-1.2"]).toMatchObject({
       label: "Google Omni 1.2 Flash",
       kinds: ["video"],
-      version: "omni-1.2-2026-11-06",
+      version: "omni-1.2-2026-11-08",
     });
   });
   it("replaces ratio/lens without duplicate punctuation", () => {

@@ -136,18 +136,19 @@ export function mapDiagnosticAnswers(
   const strengths: string[] = [];
   const unresolvedQuestions: string[] = [];
 
+  // Generic follow-ups only fit text prompts; image and video get specific questions from the rewriter.
+  const textPrompt = options.kind === "user" || options.kind === "system";
+
   if (isAmbiguous > 0.6) {
     issues.push("Ambiguous scope or objective");
-    unresolvedQuestions.push(
-      "What specific outcome makes this task a success? State it in the prompt. The optimizer cannot invent it for you.",
-    );
+    if (textPrompt)
+      unresolvedQuestions.push("What result counts as success? Add it to the prompt if it matters.");
   }
 
   if (lacksConstraints > 0.6) {
     issues.push("Missing output constraints the task itself would benefit from");
-    unresolvedQuestions.push(
-      "What output format, length, or exclusions do you want? Specify them only if you care. They will otherwise stay unstated.",
-    );
+    if (textPrompt)
+      unresolvedQuestions.push("Do you want a specific output format, length or exclusion?");
   }
 
   if (options.kind === "system" || suggestedKindChoice === "system") {
@@ -453,7 +454,7 @@ const RESTRUCTURE_NOTE =
 const INVENTED_QUESTION =
   "Does `optimized` add requirements, facts, constraints, tools, versions, examples, or success criteria that `original` does not state and the user did not ask for? Restating existing intent, organising it, or naming a detail the original clearly implies does not count. Answer yes when the rewrite introduces a new demand the user must now satisfy.";
 const VISUAL_INVENTED_QUESTION =
-  "Does `optimized` add a new hard requirement or factual claim that `original` does not state and the user did not ask for, such as a specific product, brand, person, text string, duration, aspect ratio, or a must-include or must-exclude item? Do not count visual or audio craft elaboration such as lighting, lens, camera movement, composition, color palette, mood, medium, ambience, sound effects, music, shot structure, cuts, or timecodes: that is the job of a visual prompt. Details that only make an existing subject more specific do not count either.";
+  "Does `optimized` add a new hard requirement or factual claim that `original` does not state and the user did not ask for, such as a specific product, brand, person, text string, duration, aspect ratio, or a new object the image must include? Do not count visual or audio craft elaboration such as lighting, lens, camera movement, composition, color palette, mood, medium, ambience, sound effects, music, shot structure, cuts, or timecodes: that is the job of a visual prompt. Do not count guards that only protect what the user asked for or keep the original as it is, such as no extra text beyond the user's own text, no watermark, keeping the subject, framing, aspect ratio or anything else unchanged in an edit, naming an attached image by number or role, or natural anatomy. Details that only make an existing subject more specific do not count either.";
 const CREATIVE_INVENTED_NOTE =
   " The user chose Allow additions mode: optional visual or stylistic expansion is allowed when the rewrite lists it as an assumption, but new task facts or requirements are still invented.";
 
@@ -554,7 +555,8 @@ export function runHeuristicDiagnostics(text: string, kind: PromptKind): Diagnos
 
   if (isVague && !isSubjectRef) {
     issues.push("Brief or ambiguous scope");
-    unresolvedQuestions.push("What specific outcome makes this task a success? State it if you can. The optimizer cannot invent it.");
+    if (kind === "user" || kind === "system")
+      unresolvedQuestions.push("What result counts as success? Add it to the prompt if it matters.");
   }
   if (!hasConstraints && !isSubjectRef) issues.push("Lacks explicit output constraints");
   if (!hasRole && len > 30 && kind === "system" && !isSubjectRef) {

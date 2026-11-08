@@ -23,6 +23,7 @@ interface Seed {
   name: string;
   kind: "user" | "system" | "image" | "video";
   mode?: "minimal" | "structured" | "creative";
+  engineTarget?: string;
   prompt: string;
 }
 interface Optimized {
@@ -131,9 +132,11 @@ async function main() {
         headers: {
           "Content-Type": "application/json",
           // The caller's own key: works the same on the old and new deployments.
-          "x-openrouter-key": key,
+          ...(process.env.APP_ACCESS_TOKEN
+            ? { "x-app-access-token": process.env.APP_ACCESS_TOKEN }
+            : { "x-openrouter-key": key }),
         },
-        body: JSON.stringify({ prompt: seed.prompt, kind: seed.kind, mode: seed.mode }),
+        body: JSON.stringify({ prompt: seed.prompt, kind: seed.kind, mode: seed.mode, engineTarget: seed.engineTarget }),
         signal: AbortSignal.timeout(120000),
       });
       const elapsed = Date.now() - started;

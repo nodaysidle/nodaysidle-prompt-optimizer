@@ -4,7 +4,7 @@
 - Start every reply with `ALAN`. No exceptions, including one-line answers.
 - If `HANDOFF.md` exists, read it before doing anything else.
 - When the session is long or you cannot clearly recall earlier work, say so, then write `HANDOFF.md` before continuing. It covers the goal, what's done, what's left, key files and open questions, so a fresh session can resume from it alone.
-- Consult `/home/arch/dev/nodaysidle/nodaysidle-knowledge` (`sessions/LATEST.md` and `wiki/`) as the central source of truth for ecosystem decisions.
+- Consult `/home/arch/dev/nodaysidle/nodaysidle-vault` (`wiki/hot.md`, `wiki/index.md`) as the central source of truth for ecosystem decisions; record big changes there with `/claude-obsidian:save`.
 
 ## 2. Skills and Corrections
 - Project skills live in `.claude/skills/`: `tighten-optimizer-prompt`, `optimize-optimizer`, `change-decision-model`, `ship-and-smoke`, `done-report`.

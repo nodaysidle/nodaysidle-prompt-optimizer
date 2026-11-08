@@ -14,7 +14,14 @@ export interface GateThresholds {
  * so the verbosity ceiling and the "clearly better" bar are looser there. Intent stays at 0.7 everywhere.
  */
 export const GATE_BY_MODE: Record<OptimizationMode, GateThresholds> = {
-  minimal: { intentPreserved: 0.7, overEngineered: 0.4, maxInvented: 0.5, minImprovement: 0.45 },
-  structured: { intentPreserved: 0.7, overEngineered: 0.55, maxInvented: 0.5, minImprovement: 0.35 },
+  minimal: { intentPreserved: 0.7, overEngineered: 0.4, maxInvented: 0.4, minImprovement: 0.45 },
+  structured: { intentPreserved: 0.7, overEngineered: 0.55, maxInvented: 0.4, minImprovement: 0.35 },
   creative: { intentPreserved: 0.7, overEngineered: 0.55, maxInvented: 0.65, minImprovement: 0.35 },
 };
+
+/** Image and video rewrites add visual craft by design, so they keep the earlier, wider ceiling. */
+const VISUAL_INVENTED_BASE: Record<OptimizationMode, number> = { minimal: 0.5, structured: 0.5, creative: 0.65 };
+
+export function maxInventedFor(mode: OptimizationMode, visual: boolean): number {
+  return visual ? Math.min(0.75, VISUAL_INVENTED_BASE[mode] + 0.15) : GATE_BY_MODE[mode].maxInvented;
+}

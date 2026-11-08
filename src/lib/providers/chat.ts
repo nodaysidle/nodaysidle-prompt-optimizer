@@ -1,3 +1,4 @@
+import { findFaithfulnessViolations } from "../faithfulness";
 import {
   buildOptimizerMessages,
   buildRepairMessages,
@@ -31,7 +32,7 @@ import type {
 import { chatDeepSeek } from "./deepseek";
 import { ProviderError } from "./completion";
 import { runDiagnostics, runQualityGate } from "../decisions";
-import { GATE_BY_MODE } from "../gate";
+import { GATE_BY_MODE, maxInventedFor } from "../gate";
 
 /** The real steps of one run, in order. The interface shows exactly these, never a timed animation. */
 export type Stage = "diagnose" | "rewrite" | "verify" | "repair";
@@ -226,12 +227,13 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
     });
   };
 
-  const verify = async (optimized: string): Promise<Verification> => {
+  const verify = async (optimized: string, assumptions: readonly string[] = []): Promise<Verification> => {
     const gate = await evaluate(optimized);
     const defects = [
       ...(placeholderGuard ? findFabricatedPlaceholders(params.prompt, optimized) : []),
       ...findPreservationViolations(params.prompt, optimized),
       ...findLengthViolation(params.prompt, optimized, params.kind),
+      ...findFaithfulnessViolations(params.prompt, optimized, mode, params.kind, assumptions),
       ...(placeholderGuard && isQuestionnairePrompt(optimized)
         ? ["the optimized text is a questionnaire; questions belong in the separate questions field"]
         : []),
@@ -263,9 +265,7 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
       : "deterministic checks only";
 
   const limits = GATE_BY_MODE[mode];
-  const inventedLimit = isImageOrVideo
-    ? Math.min(0.75, limits.maxInvented + 0.15)
-    : limits.maxInvented;
+  const inventedLimit = maxInventedFor(mode, isImageOrVideo);
   const gateProblems = (gate?: QualityGateResult): string[] => {
     if (!gate || gate.passed) return [];
     const out: string[] = [];
@@ -353,7 +353,7 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
   params.onStage?.("rewrite");
   const first = await attemptRewrite();
   params.onStage?.("verify");
-  const firstVerification = await verify(first.optimized);
+  const firstVerification = await verify(first.optimized, first.assumptions);
 
   if (firstVerification.passed && isMarginal(firstVerification.gate)) {
     return returnMarginal(first, firstVerification.gate!);
@@ -367,7 +367,7 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
     issues: firstVerification.defects,
   });
   params.onStage?.("verify");
-  const repairedVerification = await verify(repaired.optimized);
+  const repairedVerification = await verify(repaired.optimized, repaired.assumptions);
 
   if (repairedVerification.passed && isMarginal(repairedVerification.gate)) {
     return returnMarginal(repaired, repairedVerification.gate!);

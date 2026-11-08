@@ -5,7 +5,7 @@ import {
   type OptimizationMode,
   type PromptHistoryItem,
 } from "./types";
-import { GATE_BY_MODE } from "./gate";
+import { GATE_BY_MODE, maxInventedFor } from "./gate";
 import { migrateModel, PROFILES } from "./profiles";
 import {
   numberValue,
@@ -261,10 +261,7 @@ function historicalQuality(
         ? undefined
         : numberValue(gate.invents, 0, 1, "Invented requirements");
     const limits = GATE_BY_MODE[mode];
-    const maxInvented =
-      kind === "image" || kind === "video"
-        ? Math.min(0.75, limits.maxInvented + 0.15)
-        : limits.maxInvented;
+    const maxInvented = maxInventedFor(mode, kind === "image" || kind === "video");
     return {
       intentPreserved,
       overEngineered,

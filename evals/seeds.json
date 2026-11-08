@@ -332,5 +332,125 @@
         "only JSON"
       ]
     }
+  },
+  {
+    "name": "agent-audit-minimal",
+    "kind": "user",
+    "mode": "minimal",
+    "prompt": "make an audit of the repo you are in in /dev/nodaysidle/xyproject/ and show me your findings",
+    "expect": {
+      "containsAll": [
+        "/dev/nodaysidle/xyproject/"
+      ],
+      "lacksAny": [
+        "read-only",
+        "Read-only",
+        "do not modify",
+        "Do not modify",
+        "## Assumptions",
+        "Assumptions:",
+        "## Workflow",
+        "ready to send",
+        "ready-to-send"
+      ]
+    }
+  },
+  {
+    "name": "agent-audit-structured",
+    "kind": "user",
+    "mode": "structured",
+    "prompt": "make an audit of the repo you are in in /dev/nodaysidle/xyproject/ and show me your findings",
+    "expect": {
+      "containsAll": [
+        "/dev/nodaysidle/xyproject/"
+      ],
+      "lacksAny": [
+        "read-only",
+        "Read-only",
+        "do not modify",
+        "Do not modify",
+        "## Assumptions",
+        "Assumptions:",
+        "## Workflow",
+        "ready to send",
+        "ready-to-send"
+      ]
+    }
+  },
+  {
+    "name": "agent-audit-creative",
+    "kind": "user",
+    "mode": "creative",
+    "prompt": "make an audit of the repo you are in in /dev/nodaysidle/xyproject/ and show me your findings",
+    "expect": {
+      "containsAll": [
+        "/dev/nodaysidle/xyproject/"
+      ],
+      "containsAny": [
+        "read-only",
+        "Read-only",
+        "do not edit",
+        "Do not edit"
+      ]
+    }
+  },
+  {
+    "name": "agent-fixtests-structured",
+    "kind": "user",
+    "mode": "structured",
+    "prompt": "fix the failing tests in this repo and push it",
+    "expect": {
+      "containsAny": [
+        "push"
+      ],
+      "lacksAny": [
+        "force-push",
+        "## Assumptions",
+        "read-only"
+      ]
+    }
+  },
+  {
+    "name": "agent-focus-structured",
+    "kind": "user",
+    "mode": "structured",
+    "prompt": "look at my code and tell me what to improve, focus on the api folder",
+    "expect": {
+      "containsAny": [
+        "focus"
+      ],
+      "lacksAny": [
+        "only the api",
+        "only the `api`",
+        "read-only",
+        "Read-only"
+      ]
+    }
+  },
+  {
+    "name": "email-minimal-no-invention",
+    "kind": "user",
+    "mode": "minimal",
+    "prompt": "write me a cold email to a dentist about our booking software",
+    "expect": {
+      "lacksAny": [
+        "words",
+        "ready to send",
+        "ready-to-send"
+      ]
+    }
+  },
+  {
+    "name": "bank-system-structured-no-scope",
+    "kind": "system",
+    "mode": "structured",
+    "prompt": "you are a support bot for a bank, be nice",
+    "expect": {
+      "lacksAny": [
+        "outside bank",
+        "financial advice",
+        "Do not answer"
+      ]
+    }
   }
 ]

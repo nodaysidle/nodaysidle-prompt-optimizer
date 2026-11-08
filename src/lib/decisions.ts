@@ -6,7 +6,7 @@ import type {
   QualityGateResult,
 } from "./types";
 import { DEFECT_TAGS, DEFECT_TAG_LIST, type DefectTag } from "./defects";
-import { GATE_BY_MODE } from "./gate";
+import { GATE_BY_MODE, maxInventedFor } from "./gate";
 
 export interface DiagnoseParams {
   prompt: string;
@@ -481,9 +481,7 @@ export async function runQualityGate(
   // Visual craft adds detail the judge can read as new requirements. Give image
   // and video a slightly wider invented-requirements ceiling; hard additions such
   // as a new product, text, duration or aspect ratio still fail.
-  const maxInvented = visual
-    ? Math.min(0.75, GATE_BY_MODE[mode].maxInvented + 0.15)
-    : GATE_BY_MODE[mode].maxInvented;
+  const maxInvented = maxInventedFor(mode, visual);
 
   const inRange = (value: unknown): value is number =>
     typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;

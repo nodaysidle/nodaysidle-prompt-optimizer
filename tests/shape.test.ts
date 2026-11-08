@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { enforceFaithfulShape as shape } from "@/lib/shape";
+import { enforceFaithfulShape as shape, tidyQuestions } from "@/lib/shape";
 
 const AUD = "make an audit of the repo in /dev/x/ and show me your findings";
 
@@ -34,5 +34,18 @@ describe("enforceFaithfulShape", () => {
   });
   it("ignores image prompts", () => {
     expect(shape("a dragon", "## Context\nx", "structured", "image", []).removed).toEqual([]);
+  });
+});
+
+describe("tidyQuestions", () => {
+  it("drops the generic success question", () => {
+    expect(tidyQuestions(["What counts as success? Add it to the prompt if it matters.", "Which branch?"], [])).toEqual(["Which branch?"]);
+  });
+  it("drops a question the listed assumptions already answer", () => {
+    const q = ["Should the audit be read-only, or may files be edited?", "Which repo?"];
+    expect(tidyQuestions(q, ["Read-only mode with no file edits."])).toEqual(["Which repo?"]);
+  });
+  it("keeps unrelated questions", () => {
+    expect(tidyQuestions(["Which branch should it push to?"], ["Read-only mode."])).toEqual(["Which branch should it push to?"]);
   });
 });

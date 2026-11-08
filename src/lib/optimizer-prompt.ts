@@ -141,6 +141,7 @@ const KIND_GUIDANCE: Record<PromptKind, string> = {
 - Do not add qualities the user did not state, such as "ready-to-send" or "short enough to read in one sitting". Missing facts the task needs (recipient, sender, product details) go in "questions".`,
   system: `This is a SYSTEM prompt (governing instructions for an LLM).
 - Improve instruction precedence, behavioral boundaries, and output formatting schemas.
+- In every mode, including Allow additions: if two instructions conflict, add nothing at all (no format, severity, output section or persona), keep both as written, and ask which wins.
 - If two instructions conflict, keep both as written and add no sentence that settles the conflict; ask which one wins in "questions", unless the prompt itself already says.
 - Add role/persona scaffolding only if the prompt's purpose calls for one; a bare utility system prompt must not grow a persona.
 - Never add a scope limit, refusal rule or other constraint the user did not write; if one seems needed, ask for it in "questions".`,

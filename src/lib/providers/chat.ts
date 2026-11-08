@@ -1,5 +1,5 @@
 import { findFaithfulnessViolations } from "../faithfulness";
-import { enforceFaithfulShape } from "../shape";
+import { enforceFaithfulShape, tidyQuestions } from "../shape";
 import {
   buildOptimizerMessages,
   buildRepairMessages,
@@ -79,6 +79,7 @@ interface Verification {
 function mergeUnresolvedQuestions(
   diagnosticQuestions: string[] | undefined,
   rewriterQuestions: string[] | undefined,
+  assumptions: readonly string[] = [],
 ): string[] {
   const sources = rewriterQuestions?.length ? [rewriterQuestions] : [diagnosticQuestions];
   const seen = new Set<string>();
@@ -91,7 +92,7 @@ function mergeUnresolvedQuestions(
       out.push(question);
     }
   }
-  return out;
+  return tidyQuestions(out, assumptions);
 }
 
 function resolveSuggestedKind(
@@ -299,7 +300,7 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
       diagnostics,
       qualityGate: gate,
       suggestedKind: resolveSuggestedKind(diagnostics, params.kind),
-      unresolvedQuestions: mergeUnresolvedQuestions(diagnostics.unresolvedQuestions, draft.questions),
+      unresolvedQuestions: mergeUnresolvedQuestions(diagnostics.unresolvedQuestions, draft.questions, draft.assumptions),
       completion: draft.completion,
       rejectedDraft: {
         optimized: draft.optimized,
@@ -331,7 +332,7 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
       diagnostics,
       qualityGate: gate,
       suggestedKind: resolveSuggestedKind(diagnostics, params.kind),
-      unresolvedQuestions: mergeUnresolvedQuestions(diagnostics.unresolvedQuestions, draft.questions),
+      unresolvedQuestions: mergeUnresolvedQuestions(diagnostics.unresolvedQuestions, draft.questions, draft.assumptions),
       completion: draft.completion,
       rejectedDraft,
     };
@@ -352,7 +353,7 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
       diagnostics,
       qualityGate: gate,
       suggestedKind: resolveSuggestedKind(diagnostics, params.kind),
-      unresolvedQuestions: mergeUnresolvedQuestions(diagnostics.unresolvedQuestions, draft.questions),
+      unresolvedQuestions: mergeUnresolvedQuestions(diagnostics.unresolvedQuestions, draft.questions, draft.assumptions),
       completion: draft.completion,
     };
   };

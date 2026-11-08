@@ -56,6 +56,9 @@ export function findFaithfulnessViolations(
   if (newWordLimit && !new RegExp(newWordLimit[0].replace(/\s+/g, "\\s*"), "i").test(source) && mode !== "creative")
     out.push(`a limit the user did not write was added: "${newWordLimit[0]}"`);
 
+  if (kind === "system" && /^you are\b/i.test(result.trim()) && !/\byou are\b/i.test(source) && !/\bact as\b|\bassistant\b|\bbot\b/i.test(source))
+    out.push("added a persona the user did not write");
+
   if (mode !== "creative") {
     for (const { label, re } of FAITHFUL_FORBIDDEN) {
       if (re.test(result) && !re.test(source)) out.push(`added ${label} in a mode that must stay faithful`);

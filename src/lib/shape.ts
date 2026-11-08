@@ -127,3 +127,36 @@ export function enforceFaithfulShape(
       ? { optimized, assumptions: [...assumptions], removed: [] }
       : { optimized: text, assumptions: kept, removed: [...removed, ...renamed] };
 }
+
+const GENERIC_QUESTION_RE = /^what (?:result )?(?:counts as|is) (?:a )?success/i;
+const STOP_WORDS = new Set(["the", "a", "an", "or", "and", "of", "to", "be", "is", "it", "should", "this", "that", "for", "in", "on", "may", "any", "do", "does", "which", "what", "are", "you", "your", "my", "i", "only"]);
+
+function contentWords(text: string): Set<string> {
+  return new Set(
+    text
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, " ")
+      .split(/\s+/)
+      .filter((w) => w.length > 2 && !STOP_WORDS.has(w))
+      .map((w) => (w.length > 4 ? w.replace(/(?:ing|ed|es|s)$/, "") : w)),
+  );
+}
+
+/**
+ * A question is dropped when it is the generic "what counts as success" boilerplate, or when the
+ * prompt already states the answer as a listed assumption, so the user is never asked about
+ * something the output asserts.
+ */
+export function tidyQuestions(questions: readonly string[], assumptions: readonly string[]): string[] {
+  const assumed = assumptions.map(contentWords);
+  return questions.filter((question) => {
+    if (GENERIC_QUESTION_RE.test(question.trim())) return false;
+    const words = contentWords(question);
+    if (words.size === 0) return true;
+    return !assumed.some((set) => {
+      let shared = 0;
+      for (const w of words) if (set.has(w)) shared++;
+      return shared >= 2 && shared / words.size >= 0.5;
+    });
+  });
+}

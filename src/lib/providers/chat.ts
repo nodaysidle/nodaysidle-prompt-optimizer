@@ -1,4 +1,5 @@
 import { findFaithfulnessViolations } from "../faithfulness";
+import { completeAuditTask, isAuditTask } from "../agent-completion";
 import { enforceFaithfulShape, tidyQuestions } from "../shape";
 import {
   buildOptimizerMessages,
@@ -105,6 +106,13 @@ function resolveSuggestedKind(
 }
 
 export async function optimizePrompt(params: OptimizeParams): Promise<OptimizationResult> {
+  if (params.mode === "creative" && params.kind === "user" && isAuditTask(params.prompt)) {
+    return completeAuditTask(await optimizePromptCore({ ...params, mode: "minimal" }));
+  }
+  return optimizePromptCore(params);
+}
+
+async function optimizePromptCore(params: OptimizeParams): Promise<OptimizationResult> {
   const mode = params.mode ?? "minimal";
   const isImageOrVideo = params.kind === "image" || params.kind === "video";
   const hasSubjectPrefix = isImageOrVideo && isSubjectInPhotoPrompt(params.prompt);

@@ -8,6 +8,7 @@ export async function chatDeepSeek(params: {
   system: string;
   user: string;
   jsonMode?: boolean;
+  temperature?: number;
   maxTokens?: number;
   signal?: AbortSignal;
 }) {
@@ -16,6 +17,7 @@ export async function chatDeepSeek(params: {
     openrouterApiKey: params.openrouterApiKey,
     model: params.model,
     jsonMode: params.jsonMode,
+    temperature: params.temperature,
     maxTokens: params.maxTokens,
     signal: params.signal,
     messages: [

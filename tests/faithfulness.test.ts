@@ -39,4 +39,7 @@ describe("faithfulness guardrails", () => {
   it("ignores image and video prompts", () => {
     expect(check("a dragon", "read-only", "minimal", "image")).toEqual([]);
   });
+  it("flags an added keep-unchanged constraint", () => {
+    expect(check("fix the bug in my function", "Fix the bug.\n- Keep the function name `total` unchanged.", "structured", "user").join()).toMatch(/unchanged/);
+  });
 });

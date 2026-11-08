@@ -1,4 +1,5 @@
 import { findFaithfulnessViolations } from "../faithfulness";
+import { enforceFaithfulShape } from "../shape";
 import {
   buildOptimizerMessages,
   buildRepairMessages,
@@ -164,6 +165,7 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
         system,
         user,
         jsonMode: true,
+        temperature: 0,
         maxTokens: rewriteMaxTokens(params.prompt),
         signal: params.signal,
       });
@@ -175,6 +177,11 @@ export async function optimizePrompt(params: OptimizeParams): Promise<Optimizati
       };
 
       parsed.optimized = trimNearMiss(parsed.optimized, maxRewriteChars(params.prompt, params.kind));
+      const shaped = enforceFaithfulShape(params.prompt, parsed.optimized, mode, params.kind, parsed.assumptions);
+      if (shaped.removed.length) {
+        parsed.optimized = shaped.optimized;
+        parsed.assumptions = shaped.assumptions;
+      }
       if (hasSubjectPrefix) {
         parsed.optimized = enforceIdentityLock(
           parsed.optimized,

@@ -22,6 +22,7 @@ const FAITHFUL_FORBIDDEN: { label: string; re: RegExp }[] = [
   { label: "a stop condition", re: /\bstop and report\b/i },
   { label: "an evidence rule", re: /\bcite\b[^.\n]*\b(?:file|line|path)/i },
   { label: "a readiness claim", re: /\bready[- ]to[- ]send\b/i },
+  { label: "a keep-unchanged constraint", re: /\b(?:keep|leave)\b[^.\n]*\bunchanged\b|\bdo not (?:rename|change)\b/i },
 ];
 
 const PATH_RE = /(?:~|\.{0,2})?\/[\w.\-]+(?:\/[\w.\-]+)+\/?/g;

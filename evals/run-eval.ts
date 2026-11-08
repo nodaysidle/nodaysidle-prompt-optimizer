@@ -44,15 +44,15 @@ const IDENTITY_LOCKS: Record<string, string> = {
   universal:
     "Use the photo in the attachment as the only reference. Identity lock: exact likeness, facial geometry and proportions.",
   "nano-banana":
-    "Use the attached photo as the identity reference for the subject. Keep the subject's face, facial features and proportions exactly the same as in the photo.",
+    "Use the attached photo as the identity reference for the subject. Keep the subject's exact face, facial structure, skin tone, hair and apparent age the same as in the photo.",
   "gpt-image":
-    "Image 1 is the identity reference for the subject. Keep the subject's face, facial features and proportions exactly the same as in Image 1.",
+    "Image 1 is the identity reference for the subject. Keep the subject's exact face, facial structure, skin tone, hair and apparent age the same as in Image 1.",
   veo:
-    "Use the attached reference image as the subject reference. Keep the subject's face, facial features and proportions exactly as in the reference throughout the shot.",
+    "Use the attached reference image as the subject reference. Keep the subject's exact face, facial structure, skin tone, hair and apparent age the same as in the reference throughout the shot. Use the reference for identity only, not as the opening frame.",
   omni:
-    "Use the attached image as the identity reference for the subject. Keep the subject's face, hair and build consistent throughout the video.",
+    "Use the attached image as the identity reference for the subject. Keep the subject's exact face, hair, skin tone and build consistent throughout the video. Use the image for identity only, not as a literal frame.",
   "omni-1.2":
-    "Use the attached reference images as identity references. Keep each referenced subject's face, hair, build, and clothing consistent across shots. Do not treat the references as literal frames unless the prompt asks for that.",
+    "Use the attached reference images as identity references. Keep each referenced subject's exact face, hair, skin tone, build, and clothing consistent throughout the video. Do not treat the references as literal frames unless the prompt asks for that.",
 };
 
 const POLISH_DIACRITICS = /[ąćęłńóśźż]/i;

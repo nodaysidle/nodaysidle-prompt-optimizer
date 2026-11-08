@@ -23,15 +23,15 @@ export const IDENTITY_LOCKS: Record<EngineTarget, string> = {
   universal:
     "Use the photo in the attachment as the only reference. Identity lock: exact likeness, facial geometry and proportions.",
   "nano-banana":
-    "Use the attached photo as the identity reference for the subject. Keep the subject's face, facial features and proportions exactly the same as in the photo.",
+    "Use the attached photo as the identity reference for the subject. Keep the subject's exact face, facial structure, skin tone, hair and apparent age the same as in the photo.",
   "gpt-image":
-    "Image 1 is the identity reference for the subject. Keep the subject's face, facial features and proportions exactly the same as in Image 1.",
+    "Image 1 is the identity reference for the subject. Keep the subject's exact face, facial structure, skin tone, hair and apparent age the same as in Image 1.",
   veo:
-    "Use the attached reference image as the subject reference. Keep the subject's face, facial features and proportions exactly as in the reference throughout the shot.",
+    "Use the attached reference image as the subject reference. Keep the subject's exact face, facial structure, skin tone, hair and apparent age the same as in the reference throughout the shot. Use the reference for identity only, not as the opening frame.",
   omni:
-    "Use the attached image as the identity reference for the subject. Keep the subject's face, hair and build consistent throughout the video.",
+    "Use the attached image as the identity reference for the subject. Keep the subject's exact face, hair, skin tone and build consistent throughout the video. Use the image for identity only, not as a literal frame.",
   "omni-1.2":
-    "Use the attached reference images as identity references. Keep each referenced subject's face, hair, build, and clothing consistent across shots. Do not treat the references as literal frames unless the prompt asks for that.",
+    "Use the attached reference images as identity references. Keep each referenced subject's exact face, hair, skin tone, build, and clothing consistent throughout the video. Do not treat the references as literal frames unless the prompt asks for that.",
 };
 
 export function identityLockFor(engineTarget?: EngineTarget): string {
@@ -129,14 +129,18 @@ const KIND_GUIDANCE: Record<PromptKind, string> = {
 - Preserve the task's requested behaviors, context, interfaces, versions, and verification steps exactly.
 - Coding tasks: treat identifiers, function names, API names, numbers, and code snippets as verbatim data; never rename or alter them.
 - Research tasks: keep the question, scope, evidence expectations, and output needs.
-- Add structure (steps, headings, examples, exclusions) only when it materially helps the stated task.`,
+- Add structure (steps, headings, examples, exclusions) only when it materially helps the stated task.
+- Do not add qualities the user did not state, such as "ready-to-send" or "short enough to read in one sitting". Missing facts the task needs (recipient, sender, product details) go in "questions".`,
   system: `This is a SYSTEM prompt (governing instructions for an LLM).
 - Improve instruction precedence, behavioral boundaries, and output formatting schemas.
 - If two instructions conflict, keep both as written and add no sentence that settles the conflict; ask which one wins in "questions", unless the prompt itself already says.
-- Add role/persona scaffolding only if the prompt's purpose calls for one; a bare utility system prompt must not grow a persona.`,
+- Add role/persona scaffolding only if the prompt's purpose calls for one; a bare utility system prompt must not grow a persona.
+- Never add a scope limit, refusal rule or other constraint the user did not write; if one seems needed, ask for it in "questions".`,
   image: `This is an IMAGE GENERATION prompt.
 - Improve subject details, composition, lighting, style/medium, and color palette, in proportion to how much the image needs them.
 - Keep explicit exclusions ("no text", "no watermark", "photorealistic only") verbatim; never soften or drop them.
+- If the prompt wants a visible expression or a face likeness, keep the face visible: never stage the subject seen from behind.
+- Do not write an aspect ratio into the prompt text unless the user gave one.
 - Camera/lens cues only when they help the shot. A still image has no camera movement.
 - Follow the TARGET ENGINE PROFILE when one is given: its order, wording and limits win over general habits.`,
   video: `This is a VIDEO GENERATION prompt.

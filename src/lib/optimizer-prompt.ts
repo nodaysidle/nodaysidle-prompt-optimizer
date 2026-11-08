@@ -100,11 +100,11 @@ export function enforceIdentityLock(
 
 const MODE_GUIDANCE: Record<OptimizationMode, string> = {
   minimal:
-    "MODE minimal: make the smallest useful edit. Preserve wording and length where possible. Do not add roles, formats, steps or optional detail.",
+    "MODE minimal: make the smallest useful edit. Preserve wording and length where possible. Do not add roles, formats, steps, word limits, deliverables or any other detail the user did not write; if the prompt is already clear, return it unchanged. Do not add words like \"short\", \"clear\" or \"professional\" that the user did not use.",
   structured:
-    "MODE structured: organize the existing information with concise headings where useful. Do not invent context, task facts, constraints, camera motion, duration or output format.",
+    "MODE structured: organize the existing information with concise headings where useful. Do not invent context, task facts, constraints, deliverables, qualifiers (\"ready to send\", \"exactly\", \"general\"), camera motion, duration or output format. Never tighten a stated requirement. A Deliverables line may only restate what the user asked for (\"write an email\" gives \"One email\"); do not add explanations, tests, formats or readiness claims.",
   creative:
-    "MODE creative: the user authorizes optional creative expansion only where it does not conflict with supplied facts or hard constraints. List each expansion in the \"assumptions\" field. Never invent factual task context.",
+    "MODE creative: the user authorizes optional creative expansion only where it does not conflict with supplied facts or hard constraints. List EVERY expansion in the \"assumptions\" field, one entry per added requirement, tone, length, format or example; an unlisted addition is a defect. Never invent factual task context.",
 };
 
 /** Light edit for a renderer: a thin prompt is the defect, so complete each element instead of holding back. */
@@ -130,6 +130,8 @@ const KIND_GUIDANCE: Record<PromptKind, string> = {
 - Coding tasks: treat identifiers, function names, API names, numbers, and code snippets as verbatim data; never rename or alter them.
 - Research tasks: keep the question, scope, evidence expectations, and output needs.
 - Add structure (steps, headings, examples, exclusions) only when it materially helps the stated task.
+- If the prompt refers to material that is not in it (\"this contract\", \"my code\", \"the attached\"), ask for that material in \"questions\" and never reconstruct it. If a stated limit is ambiguous in scope (for example a bullet cap over both a summary and a list), ask which scope.
+- Questions must be specific to this task; never ask a generic \"what counts as success\" question.
 - Do not add qualities the user did not state, such as "ready-to-send" or "short enough to read in one sitting". Missing facts the task needs (recipient, sender, product details) go in "questions".`,
   system: `This is a SYSTEM prompt (governing instructions for an LLM).
 - Improve instruction precedence, behavioral boundaries, and output formatting schemas.

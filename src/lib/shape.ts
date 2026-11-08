@@ -46,7 +46,7 @@ export interface ShapedRewrite {
  * Enforces by code what the rewriter is only asked to do in words: in Light edit and Restructure a
  * text prompt gets no Context, Deliverables, Done when, Workflow, Evidence or Assumptions block the
  * user's own words did not license, and Allow additions keeps its assumptions in the assumptions
- * list, never as a second copy inside the prompt body.
+ * list; its in-body block is kept, relabelled Requirements, because the agent only sees the body.
  */
 export function enforceFaithfulShape(
   original: string,
@@ -57,6 +57,7 @@ export function enforceFaithfulShape(
 ): ShapedRewrite {
   if (kind !== "user" && kind !== "system") return { optimized, assumptions: [...assumptions], removed: [] };
   const removed: string[] = [];
+  const renamed: string[] = [];
   const kept = [...assumptions];
   const source = original.replace(/```[\s\S]*?```/g, "");
 
@@ -65,6 +66,16 @@ export function enforceFaithfulShape(
   for (const section of sections) {
     const rule = UNLICENSED.find((r) => r.heading.test(section.heading));
     const isAssumptions = rule?.heading.test("assumptions");
+    if (isAssumptions && mode === "creative") {
+      const bullets = section.text.split("\n").slice(1).flatMap((line) => {
+        const bullet = /^\s*[-*]\s+(.+)$/.exec(line);
+        return bullet ? [bullet[1].trim()] : [];
+      });
+      if (kept.length === 0) kept.push(...bullets);
+      out.push(section.text.replace(HEADING_RE, "## Requirements").trimEnd());
+      renamed.push(section.heading);
+      continue;
+    }
     const drop = rule && (isAssumptions ? true : mode !== "creative" && !rule.licensedBy.test(source));
     if (!drop) {
       out.push(section.text.trimEnd());
@@ -82,7 +93,21 @@ export function enforceFaithfulShape(
   let text = out.join("\n\n");
   const labelled = text.split("\n");
   const at = labelled.findIndex((l) => ASSUMPTIONS_LABEL_RE.test(l.trim()));
-  if (at >= 0) {
+  if (at >= 0 && mode === "creative") {
+    renamed.push("Assumptions");
+    const block: string[] = [];
+    for (const line of labelled.slice(at + 1)) {
+      if (/^\s*[-*]\s+/.test(line) || !line.trim()) block.push(line);
+      else break;
+    }
+    if (kept.length === 0)
+      for (const line of block) {
+        const bullet = /^\s*[-*]\s+(.+)$/.exec(line);
+        if (bullet) kept.push(bullet[1].trim());
+      }
+    labelled[at] = "Requirements:";
+    text = labelled.join("\n");
+  } else if (at >= 0) {
     removed.push("Assumptions");
     const tail = labelled.slice(at + 1);
     const block: string[] = [];
@@ -96,7 +121,9 @@ export function enforceFaithfulShape(
   }
 
   text = text.replace(/\n{3,}/g, "\n\n").trim();
-  return removed.length === 0 || !text
+  return removed.length === 0 && renamed.length === 0
     ? { optimized, assumptions: [...assumptions], removed: [] }
-    : { optimized: text, assumptions: kept, removed };
+    : !text
+      ? { optimized, assumptions: [...assumptions], removed: [] }
+      : { optimized: text, assumptions: kept, removed: [...removed, ...renamed] };
 }

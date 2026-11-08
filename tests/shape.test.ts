@@ -18,11 +18,15 @@ describe("enforceFaithfulShape", () => {
     const out = "## Goal\nReview.\n\n## Requirements\n- Be strict.\n\n## Constraints\n- Never nitpick.";
     expect(shape("review. be strict. never nitpick", out, "structured", "system", []).removed).toEqual([]);
   });
-  it("moves an in-body Assumptions block into the assumptions list in creative mode", () => {
+  it("keeps an in-body Assumptions block in creative mode as Requirements and fills the list", () => {
     const out = "Audit /dev/x/.\n\nAssumptions:\n- Read-only.\n- Cite lines.";
     const r = shape(AUD, out, "creative", "user", []);
-    expect(r.optimized).toBe("Audit /dev/x/.");
+    expect(r.optimized).toBe("Audit /dev/x/.\n\nRequirements:\n- Read-only.\n- Cite lines.");
     expect(r.assumptions).toEqual(["Read-only.", "Cite lines."]);
+  });
+  it("drops an in-body Assumptions block in structured mode", () => {
+    const r = shape(AUD, "## Goal\nAudit.\n\nAssumptions:\n- Read-only.", "structured", "user", []);
+    expect(r.optimized).toBe("## Goal\nAudit.");
   });
   it("leaves creative sections and existing assumptions alone", () => {
     const out = "Audit.\n\n## Requirements\n- Read-only.";

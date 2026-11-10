@@ -283,9 +283,8 @@ export function PromptWorkspace() {
         const data = await requestDiagnostics(draft, settings, controller.signal);
         if (diagnosticId.current === id && !controller.signal.aborted)
           setDiagnosticState({ data, key: contextKey });
-      } catch (e) {
-        if (diagnosticId.current === id && !controller.signal.aborted)
-          setFailure({ message: e instanceof Error ? e.message : "Reading the draft failed." });
+      } catch {
+        // Background auto-diagnostic failure should not corrupt the main failure state.
       } finally {
         if (diagnosticId.current === id) setDiagnosingKey(null);
       }

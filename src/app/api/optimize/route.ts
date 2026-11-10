@@ -10,6 +10,8 @@ import { readBody, routeError } from "@/lib/server/route";
 
 const NO_STORE = { "Cache-Control": "no-store" };
 
+export const maxDuration = 60;
+
 /**
  * Plain JSON by default. A client that sends `Accept: application/x-ndjson` also gets
  * one line per real pipeline stage as it starts, then a final `result` or `error` line.

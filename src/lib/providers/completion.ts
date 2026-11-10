@@ -134,7 +134,10 @@ async function request(
     ...(route === "direct" ? { thinking: { type: "disabled" } } : {}),
     // The fastest healthy upstream, not the cheapest; the rewrite sits on the user's critical path.
     ...(route === "openrouter"
-      ? { provider: { sort: "latency", allow_fallbacks: true } }
+      ? {
+          provider: { sort: "latency", allow_fallbacks: true },
+          reasoning: { effort: "none" },
+        }
       : {}),
     ...(params.jsonMode ? { response_format: { type: "json_object" } } : {}),
   };
@@ -158,15 +161,15 @@ export async function complete(
   const timeout = Math.min(90000, 15000 + (params.maxTokens ?? 4096) * 12);
 
   let data: unknown;
-  if (keys.openrouter) {
+  if (keys.direct) {
     try {
-      data = await request("openrouter", keys.openrouter, params, timeout);
-    } catch (error) {
-      if (!keys.direct || isCancelled(error, params.signal)) throw error;
       data = await request("direct", keys.direct, params, timeout);
+    } catch (error) {
+      if (!keys.openrouter || isCancelled(error, params.signal)) throw error;
+      data = await request("openrouter", keys.openrouter, params, timeout);
     }
   } else {
-    data = await request("direct", keys.direct, params, timeout);
+    data = await request("openrouter", keys.openrouter, params, timeout);
   }
   return parseCompletion(data, start);
 }

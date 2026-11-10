@@ -376,11 +376,29 @@ describe("provider completion", () => {
     expect(result.usage?.total_tokens).toBe(15);
     expect(result.elapsedMs).toBeGreaterThanOrEqual(0);
   });
-  it("is OpenRouter-first with latency routing when an OpenRouter key exists", async () => {
+  it("prefers direct DeepSeek when both direct and OpenRouter keys exist", async () => {
     const fetch = vi.fn().mockResolvedValue(completion());
     vi.stubGlobal("fetch", fetch);
     await complete({
       apiKey: "own-deepseek",
+      openrouterApiKey: "own-openrouter",
+      model: "deepseek-v4-pro",
+      messages: [{ role: "user", content: "task" }],
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(urlOf(fetch.mock.calls[0])).toBe(DEEPSEEK_URL);
+    expect(authOf(fetch.mock.calls[0])).toBe("Bearer own-deepseek");
+    const body = bodyOf(fetch.mock.calls[0]);
+    expect(body).toMatchObject({
+      model: "deepseek-v4-pro",
+      thinking: { type: "disabled" },
+    });
+  });
+  it("uses OpenRouter with latency routing and reasoning disabled when only OpenRouter key is provided", async () => {
+    const fetch = vi.fn().mockResolvedValue(completion());
+    vi.stubGlobal("fetch", fetch);
+    await complete({
+      apiKey: "",
       openrouterApiKey: "own-openrouter",
       model: "deepseek-v4-pro",
       messages: [{ role: "user", content: "task" }],
@@ -392,6 +410,7 @@ describe("provider completion", () => {
     expect(body).toMatchObject({
       model: "deepseek/deepseek-v4-pro",
       provider: { sort: "latency", allow_fallbacks: true },
+      reasoning: { effort: "none" },
     });
     expect(body.thinking).toBeUndefined();
   });
@@ -408,11 +427,11 @@ describe("provider completion", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(urlOf(fetch.mock.calls[0])).toBe(OPENROUTER_URL);
   });
-  it("falls back to the direct DeepSeek key when OpenRouter fails", async () => {
+  it("falls back to OpenRouter when direct DeepSeek fails", async () => {
     const fetch = vi
       .fn()
       .mockResolvedValueOnce(new Response("down", { status: 503 }))
-      .mockResolvedValueOnce(completion("from direct"));
+      .mockResolvedValueOnce(completion("from openrouter"));
     vi.stubGlobal("fetch", fetch);
     const result = await complete({
       apiKey: "own-deepseek",
@@ -420,14 +439,15 @@ describe("provider completion", () => {
       model: "deepseek-v4.1-flash",
       messages: [{ role: "user", content: "task" }],
     });
-    expect(result.content).toBe("from direct");
+    expect(result.content).toBe("from openrouter");
     expect(fetch.mock.calls.map(urlOf)).toEqual([
-      OPENROUTER_URL,
       DEEPSEEK_URL,
+      OPENROUTER_URL,
     ]);
-    expect(authOf(fetch.mock.calls[1])).toBe("Bearer own-deepseek");
+    expect(authOf(fetch.mock.calls[1])).toBe("Bearer own-openrouter");
     expect(bodyOf(fetch.mock.calls[1])).toMatchObject({
-      thinking: { type: "disabled" },
+      provider: { sort: "latency", allow_fallbacks: true },
+      reasoning: { effort: "none" },
     });
   });
   it("does not fall back after the caller cancelled", async () => {
@@ -1077,7 +1097,7 @@ describe("API routes wire every owner-funded decisions key", () => {
     );
     expect(response.status).toBe(200);
     expect(urlOf(fetch.mock.calls[0])).toBe(MOUSE_URL);
-    expect(urlOf(fetch.mock.calls[1])).toBe(OPENROUTER_URL);
+    expect(urlOf(fetch.mock.calls[1])).toBe(DEEPSEEK_URL);
     expect(urlOf(fetch.mock.calls[2])).toBe(MOUSE_URL);
     const result = (await response.json()) as { optimized?: string };
     expect(result.optimized).toBe(prompt);
@@ -1327,7 +1347,7 @@ describe("API regression boundaries", () => {
       expect(result.after.content).toBe("Actual mocked output");
     },
   );
-  it("test-run with only an OpenRouter key and with a valid token routes through OpenRouter", async () => {
+  it("test-run routes through OpenRouter with an OpenRouter key and direct DeepSeek with a token", async () => {
     const fetch = vi
       .fn()
       .mockImplementation(() => Promise.resolve(completion()));
@@ -1354,8 +1374,8 @@ describe("API regression boundaries", () => {
         )
       ).status,
     ).toBe(200);
-    expect(urlOf(fetch.mock.calls[1])).toBe(OPENROUTER_URL);
-    expect(authOf(fetch.mock.calls[1])).toBe("Bearer server-openrouter");
+    expect(urlOf(fetch.mock.calls[1])).toBe(DEEPSEEK_URL);
+    expect(authOf(fetch.mock.calls[1])).toBe("Bearer server-deepseek");
   });
   it("one failed paired side produces no fake comparison", async () => {
     vi.stubGlobal(

@@ -2,6 +2,8 @@ import { runPromptTest } from "@/lib/providers/deepseek";
 import { AppError, numberValue, text, validateDomain } from "@/lib/validation";
 import { resolveChatKeys } from "@/lib/server/access";
 import { readBody, routeError } from "@/lib/server/route";
+
+export const maxDuration = 60;
 export async function POST(req: Request) {
   try {
     const domain = validateDomain(await readBody(req));

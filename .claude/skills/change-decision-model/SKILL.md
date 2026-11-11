@@ -1,6 +1,6 @@
 ---
 name: change-decision-model
-description: Use whenever the user wants to change, add, swap, upgrade or compare a model the optimizer uses: the decision backends (TypeSafe, microsoft/microsoft-decision-1 via OpenRouter) in src/lib/decisions.ts, the rewrite models in MODEL_IDS (deepseek-v4.1-flash / deepseek-flash via platform.deepseek in src/lib/providers/completion.ts), or the eval judge (JUDGE_MODEL in evals/judge.ts). Also use when the user asks "which model should we use" or "is there a better model". Web research comes first, always.
+description: Use whenever the user wants to change, add, swap, upgrade or compare a model the optimizer uses: the decision backends (TypeSafe, google/gemini-decision-1 via OpenRouter) in src/lib/decisions.ts, the rewrite models in MODEL_IDS (deepseek-v4.1-flash / deepseek-flash via platform.deepseek in src/lib/providers/completion.ts), or the eval judge (JUDGE_MODEL in evals/judge.ts). Also use when the user asks "which model should we use" or "is there a better model". Web research comes first, always.
 ---
 
 # Change a decision model

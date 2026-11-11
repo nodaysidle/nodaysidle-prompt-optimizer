@@ -261,7 +261,7 @@ const TYPESAFE_MODEL = "jev-latest";
 const MOUSE_URL = "https://api.mouse.dev/v1/decisions";
 const MOUSE_MODEL = "mouse-1";
 const OPENROUTER_DECISIONS_URL = "https://openrouter.ai/api/alpha/decisions";
-const DECISION1_MODEL = "microsoft/microsoft-decision-1";
+const DECISION1_MODEL = "google/gemini-decision-1";
 
 export const DEFAULT_DECISION_ORDER: DecisionBackendName[] = [
   "typesafe",
@@ -324,7 +324,7 @@ function backendFor(
     ? {
         url: OPENROUTER_DECISIONS_URL,
         model: DECISION1_MODEL,
-        judge: "Microsoft-Decision-1",
+        judge: "Google-Gemini-Decision-1",
         apiKey,
         timeout: 6000,
       }

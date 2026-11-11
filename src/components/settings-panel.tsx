@@ -203,7 +203,7 @@ type SettingsForm = ReturnType<typeof useSettingsForm>;
 const JUDGE_LABEL: Record<DecisionBackendName, string> = {
   typesafe: "TypeSafe Jev",
   mouse: "Mouse-1",
-  decision1: "Microsoft Decision-1",
+  decision1: "Gemini Decision 1",
 };
 
 /** What will judge the next run, before the user spends a rewrite. */
@@ -232,7 +232,7 @@ function JudgeStatus({
     parts.push("No server judge key is configured.");
   }
   if (draft.openrouterApiKey.trim()) {
-    parts.push("Your OpenRouter key: Microsoft Decision-1");
+    parts.push("Your OpenRouter key: Gemini Decision 1");
   }
   if (!configured.length && !draft.openrouterApiKey.trim()) {
     parts.push(
@@ -273,9 +273,9 @@ function SettingsFields({ form }: { form: SettingsForm }) {
         </p>
         {field("openrouterApiKey", "OpenRouter API key", "openrouter")}
         <p className="help">
-          Adds Decision-1 checks when no server decisions key is active: intent
+          Adds Gemini Decision 1 checks when no server decisions key is active: intent
           kept, bloat, and whether the rewrite is better. The server tries
-          TypeSafe, then Mouse-1, then Decision-1. With none of them, the draft
+          TypeSafe, then Mouse-1, then Gemini Decision 1. With none of them, the draft
           read is rule-based and rewrites are not independently checked.
         </p>
       </section>
@@ -285,7 +285,7 @@ function SettingsFields({ form }: { form: SettingsForm }) {
         <JudgeStatus server={server} draft={draft} />
         <p className="help">
           The server order is set by DECISION_ORDER. Default: TypeSafe Jev,
-          Mouse-1, Microsoft Decision-1.
+          Mouse-1, Gemini Decision 1.
         </p>
       </section>
 

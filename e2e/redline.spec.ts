@@ -8,7 +8,7 @@ const RESULT = {
   assumptions: [],
   warnings: [],
   unresolvedQuestions: ["Who is the poem for?"],
-  qualityGate: { intentPreserved: 0.95, overEngineered: 0.1, passed: true, judge: "Microsoft-Decision-1" },
+  qualityGate: { intentPreserved: 0.95, overEngineered: 0.1, passed: true, judge: "Google-Gemini-Decision-1" },
   completion: { model: "deepseek/deepseek-v4.1-flash", elapsedMs: 4200 },
 };
 const stream = (events: unknown[]) => events.map((event) => `${JSON.stringify(event)}\n`).join("");

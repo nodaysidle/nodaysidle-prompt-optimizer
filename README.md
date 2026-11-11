@@ -11,7 +11,7 @@ Live: https://nodaysidle-prompt-optimizer.vercel.app
 ```text
 your draft
   -> diagnose   TypeSafe Jev reads it if TYPESAFE_API_KEY is set, else Mouse-1 if
-                MOUSE_API_KEY is set, else Microsoft Decision-1 via OpenRouter
+                MOUSE_API_KEY is set, else Gemini Decision 1 via OpenRouter
                 (rule-based if none answers)
   -> rewrite    DeepSeek V4.1 Flash or V4 Pro, one JSON rewrite
   -> verify     built-in checks (quoted text, numbers, code, length, no placeholders,

@@ -634,7 +634,7 @@ describe("decisions: diagnostics and quality gate", () => {
     expect(urlOf(fetch.mock.calls[0])).toBe(DECISIONS_URL);
     expect(authOf(fetch.mock.calls[0])).toBe("Bearer own-openrouter");
     expect(result.heuristic).toBeFalsy();
-    expect(result.engine).toBe("microsoft/microsoft-decision-1");
+    expect(result.engine).toBe("google/gemini-decision-1");
     expect(result.clarityScore).toBe(2);
   });
   it.each([
@@ -743,7 +743,7 @@ describe("decisions: diagnostics and quality gate", () => {
     expect(await run()).toMatchObject({
       passed: true,
       improvement: 0.8,
-      judge: "Microsoft-Decision-1",
+      judge: "Google-Gemini-Decision-1",
     });
     expect(await run()).toMatchObject({ passed: false });
     expect(await run()).toMatchObject({ passed: false });
@@ -976,7 +976,7 @@ describe("decisions: Mouse-1 backend", () => {
     const result = await pending;
     vi.useRealTimers();
     expect(urlOf(fetch.mock.calls[1])).toBe(DECISIONS_URL);
-    expect(result.engine).toBe("microsoft/microsoft-decision-1");
+    expect(result.engine).toBe("google/gemini-decision-1");
   });
   it("with only a Mouse key, a Mouse failure falls back to the rules", async () => {
     const fetch = vi.fn().mockResolvedValue(new Response("no credits", { status: 402 }));
@@ -1019,7 +1019,7 @@ describe("decisions: Mouse-1 backend", () => {
       openrouterKey: "own-openrouter",
     });
     expect(urlOf(fetch.mock.calls[1])).toBe(DECISIONS_URL);
-    expect(result).toMatchObject({ judge: "Microsoft-Decision-1" });
+    expect(result).toMatchObject({ judge: "Google-Gemini-Decision-1" });
   });
 });
 

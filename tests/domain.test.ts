@@ -524,7 +524,7 @@ describe("history and credentials", () => {
           passed: true,
           intentPreserved: 0.9,
           overEngineered: 0.1,
-          judge: "Microsoft-Decision-1",
+          judge: "Google-Gemini-Decision-1",
         },
         deepseekApiKey: "not-allowed",
       },

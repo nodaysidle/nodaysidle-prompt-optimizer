@@ -452,5 +452,60 @@
         "Do not answer"
       ]
     }
+  },
+  {
+    "name": "contractions-not-quotes",
+    "kind": "user",
+    "mode": "structured",
+    "prompt": "Go through the payments service, it's in services/payments, and clean up the retry logic because there's three different backoff implementations. Don't change the public API and don't touch the webhook handler.",
+    "expect": {
+      "mustRewrite": true,
+      "containsAll": [
+        "services/payments",
+        "webhook"
+      ]
+    }
+  },
+  {
+    "name": "numbered-steps-to-brief",
+    "kind": "user",
+    "mode": "structured",
+    "prompt": "fix the flaky checkout test. steps i want: 1. reproduce it locally 2. find the race 3. fix it without adding sleeps 4. run the whole suite twice",
+    "expect": {
+      "mustRewrite": true,
+      "containsAll": [
+        "sleeps",
+        "twice"
+      ]
+    }
+  },
+  {
+    "name": "context-facts-kept",
+    "kind": "user",
+    "mode": "structured",
+    "prompt": "add login to my app. we use next-auth v4 with the Prisma adapter, next 15 and vitest. only email magic links, no passwords. tests must pass before you say done",
+    "expect": {
+      "mustRewrite": true,
+      "containsAll": [
+        "next-auth",
+        "Prisma",
+        "15",
+        "vitest",
+        "magic link"
+      ]
+    }
+  },
+  {
+    "name": "lock-hair-change",
+    "kind": "image",
+    "engineTarget": "nano-banana",
+    "mode": "minimal",
+    "prompt": "The subject in the photo. same person but with bright pink hair, at a rooftop party at sunset",
+    "expect": {
+      "containsAll": [
+        "pink hair",
+        "rooftop"
+      ]
+    }
   }
 ]

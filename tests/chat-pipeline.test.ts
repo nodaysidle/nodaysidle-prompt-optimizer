@@ -277,10 +277,29 @@ describe("optimizePrompt pipeline", () => {
     });
 
     expect(result.optimized).toBe(original);
-    expect(result.summary).toContain("already effective");
+    expect(result.summary).toContain("not clearly better than your original");
+    expect(result.summary).not.toContain("already effective");
     expect(result.rejectedDraft?.reason).toBe("marginal");
     expect(result.rejectedDraft?.optimized).toContain("practical uses");
     expect(mockedChat).toHaveBeenCalledTimes(1);
+  });
+
+  it("says no changes were proposed when the rewriter returned the prompt as it was", async () => {
+    const original = "List three uses of Rust's borrow checker.";
+    mockedChat.mockResolvedValue(responseJson(original));
+    mockedGate.mockResolvedValue({ intentPreserved: 0.95, overEngineered: 0.1, improvement: 0.2, passed: true });
+
+    const result = await optimizePrompt({
+      prompt: original,
+      kind: "user",
+      deepseekApiKey: "sk-test",
+      model: "deepseek-v4.1-flash",
+      openrouterApiKey: "sk-or-test",
+    });
+
+    expect(result.optimized).toBe(original);
+    expect(result.summary.startsWith("No changes were proposed")).toBe(true);
+    expect(result.rejectedDraft).toBeUndefined();
   });
 
   it("returns the rewrite when Decision-1 sees a clear improvement", async () => {

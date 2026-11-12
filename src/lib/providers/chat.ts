@@ -328,16 +328,21 @@ async function optimizePromptCore(params: OptimizeParams): Promise<OptimizationR
     gate?.improvement !== undefined && gate.improvement < limits.minImprovement;
 
   const returnMarginal = (draft: ParsedRewrite, gate: QualityGateResult): OptimizationResult => {
-    const rejectedDraft: RejectedDraft = {
-      optimized: draft.optimized,
-      negativePrompt: draft.negativePrompt,
-      reason: "marginal",
-      problems: [`only ${Math.round((gate.improvement ?? 0) * 100)}% likely to work better than your original`],
-    };
+    const unchanged = draft.optimized.trim() === original().trim();
+    const rejectedDraft: RejectedDraft | undefined = unchanged
+      ? undefined
+      : {
+          optimized: draft.optimized,
+          negativePrompt: draft.negativePrompt,
+          reason: "marginal",
+          problems: [`only ${Math.round((gate.improvement ?? 0) * 100)}% likely to work better than your original`],
+        };
     return {
       optimized: original(),
       negativePrompt: undefined,
-      summary: `Your prompt was already effective: the rewrite kept your intent but was not clearly better (${describeGate(gate)}), so your original is kept. The rewrite is shown below if you want it anyway.`,
+      summary: unchanged
+        ? "No changes were proposed: the rewriter returned your prompt as it was."
+        : `The rewrite kept your intent but was not clearly better than your original (${describeGate(gate)}), so your original is kept. You can still review the rejected rewrite.`,
       changes: [],
       assumptions: [],
       warnings: [],

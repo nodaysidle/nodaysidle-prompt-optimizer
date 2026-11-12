@@ -92,6 +92,26 @@ describe("extractVerbatimRequirements / findPreservationViolations", () => {
     );
     expect(violations.some((v) => v === "code block was altered or removed")).toBe(true);
   });
+
+  const APOSTROPHES = "Write a reply to the customer's complaint. Don't apologise, it's their fault.";
+  it("does not read apostrophes as quoted text", () => {
+    expect(extractVerbatimRequirements(APOSTROPHES).filter((i) => i.startsWith("quoted:"))).toEqual([]);
+  });
+
+  it("does not flag a rephrased prompt that only has apostrophes", () => {
+    const violations = findPreservationViolations(APOSTROPHES, "Reply to the customer complaint without apologising; the fault is theirs.");
+    expect(violations.filter((v) => v.startsWith("quoted text"))).toEqual([]);
+  });
+
+  it("still extracts a single-quoted span", () => {
+    expect(extractVerbatimRequirements("Translate 'good morning' to French")).toContain("quoted: good morning");
+  });
+
+  it("still extracts a double-quoted span and flags its removal", () => {
+    const original = 'Reply with "thanks for waiting" first.';
+    expect(extractVerbatimRequirements(original)).toContain("quoted: thanks for waiting");
+    expect(findPreservationViolations(original, "Reply politely first.")).toContain('quoted text was altered or removed: "thanks for waiting"');
+  });
 });
 
 describe("parseOptimizationResponse", () => {

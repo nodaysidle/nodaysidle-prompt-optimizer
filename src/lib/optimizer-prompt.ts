@@ -187,7 +187,8 @@ const CODE_FENCE_RE = /```[a-zA-Z0-9_+-]*\n?([\s\S]*?)```/g;
 export function maskCodeBlocks(text: string): string {
   return text.replace(CODE_FENCE_RE, (_, body: string) => `[code block, ${body.trim().split("\n").length} lines, kept verbatim]`);
 }
-const QUOTED_RE = /"([^"\n]{2,120})"|'([^'\n]{2,120})'/g;
+// A single quote touching a letter or digit is an apostrophe ("it's", "customers'"), not a quotation mark.
+const QUOTED_RE = /"([^"\n]{2,120})"|(?<![\p{L}\p{N}])'([^'\n]{2,120})'(?![\p{L}\p{N}])/gu;
 const NUMBER_RE = /\d+(?:[.,]\d+)*|\b\d+\b/g;
 
 function normalizeForMatch(value: string): string {

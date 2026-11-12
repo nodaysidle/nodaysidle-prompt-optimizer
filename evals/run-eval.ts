@@ -1,6 +1,7 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { compareRuns, formatChanges, keptCounts, type EvalRow } from "./compare.ts";
 
 interface SeedExpectations {
   containsAll?: string[];
@@ -28,8 +29,17 @@ interface OptimizeResponse {
   optimized?: string;
   summary?: string;
   unresolvedQuestions?: string[];
-  qualityGate?: { intentPreserved: number; overEngineered: number; passed: boolean; judge?: string };
+  qualityGate?: {
+    intentPreserved: number;
+    overEngineered: number;
+    passed: boolean;
+    judge?: string;
+    invents?: number;
+    improvement?: number;
+  };
   suggestedKind?: string;
+  /** Present when the app kept the original: the rewrite it threw away, and why. */
+  rejectedDraft?: { optimized?: string; reason?: "failed" | "marginal"; problems?: string[] };
   error?: string;
 }
 
@@ -153,8 +163,25 @@ function runChecks(seed: Seed, response: OptimizeResponse): CheckResult[] {
   return checks;
 }
 
+function arg(name: string, fallback: string): string {
+  const at = process.argv.indexOf(`--${name}`);
+  return at === -1 ? fallback : (process.argv[at + 1] ?? fallback);
+}
+
+/** A lock seed's kept original comes back with the lock sentence in front, so rejectedDraft is the reliable signal. */
+function isKept(seed: Seed, response: OptimizeResponse): boolean {
+  return Boolean(response.rejectedDraft) || (response.optimized ?? "").trim() === seed.prompt.trim();
+}
+
+function keptNote(response: OptimizeResponse): string {
+  const detail = [response.rejectedDraft?.reason, response.rejectedDraft?.problems?.[0]].filter(Boolean).join(": ");
+  return ` | KEPT${detail ? ` (${detail})` : ""}`;
+}
+
 async function main() {
   const base = (process.env.EVAL_BASE_URL || "https://nodaysidle-prompt-optimizer.vercel.app").replace(/\/$/, "");
+  const out = arg("out", "");
+  const baselineFile = arg("baseline", "");
   const here = dirname(fileURLToPath(import.meta.url));
   const seeds = JSON.parse(readFileSync(join(here, "seeds.json"), "utf8")) as Seed[];
 
@@ -162,6 +189,7 @@ async function main() {
 
   let passCount = 0;
   const failures: string[] = [];
+  const rows: EvalRow[] = [];
   let latencyTotal = 0;
 
   for (const seed of seeds) {
@@ -190,17 +218,26 @@ async function main() {
       if (!res.ok) {
         console.log(`HTTP ${res.status} — ${response?.error ?? "unknown error"}`);
         failures.push(`${seed.name}: HTTP ${res.status} ${response?.error ?? ""}`);
+        rows.push({ seed: seed.name, kind: seed.kind, outcome: "error", kept: false });
         continue;
       }
     } catch (err) {
       console.log(`request failed: ${err instanceof Error ? err.message : String(err)}`);
       failures.push(`${seed.name}: request failed`);
+      rows.push({ seed: seed.name, kind: seed.kind, outcome: "error", kept: false });
       continue;
     }
 
-    if (seed.expect?.mustRewrite && (response.optimized ?? "").trim() === seed.prompt.trim()) {
-      console.log("FAIL: original kept, the rewrite was rejected");
-      failures.push(`${seed.name}: original kept`);
+    const kept = isKept(seed, response);
+    const keptSuffix = kept ? keptNote(response) : "";
+    const row: EvalRow = { seed: seed.name, kind: seed.kind, outcome: "pass", kept, keptReason: response.rejectedDraft?.reason };
+    rows.push(row);
+
+    if (seed.expect?.mustRewrite && kept) {
+      const problem = response.rejectedDraft?.problems?.[0];
+      console.log(`FAIL: original kept, the rewrite was rejected${problem ? ` (${problem})` : ""}`);
+      failures.push(`${seed.name}: original kept${problem ? ` (${problem})` : ""}`);
+      row.outcome = "fail";
       continue;
     }
 
@@ -210,10 +247,11 @@ async function main() {
         const ok = surfaced > 0;
         if (ok) {
           passCount++;
-          console.log(`PRESERVED-ORIGINAL (accepted) — questions surfaced: ${surfaced} — ${response.summary.slice(0, 140)}`);
+          console.log(`PRESERVED-ORIGINAL (accepted) — questions surfaced: ${surfaced} — ${response.summary.slice(0, 140)}${keptSuffix}`);
         } else {
-          console.log(`PRESERVED-ORIGINAL (FAIL) — no unresolved questions surfaced with the preserved original`);
+          console.log(`PRESERVED-ORIGINAL (FAIL) — no unresolved questions surfaced with the preserved original${keptSuffix}`);
           failures.push(`${seed.name}: original preserved but unresolved questions missing`);
+          row.outcome = "fail";
         }
         continue;
       }
@@ -228,15 +266,35 @@ async function main() {
 
     if (failed.length === 0) {
       passCount++;
-      console.log(`PASS (${checks.map((c) => c.detail).join(" | ")}${notes.length ? " | " + notes.join(", ") : ""})`);
+      console.log(`PASS (${checks.map((c) => c.detail).join(" | ")}${notes.length ? " | " + notes.join(", ") : ""})${keptSuffix}`);
     } else {
-      console.log(`FAIL — ${failed.map((c) => `${c.name}: ${c.detail}`).join(" | ")}${notes.length ? ` | ${notes.join(", ")}` : ""}`);
+      row.outcome = "fail";
+      console.log(`FAIL — ${failed.map((c) => `${c.name}: ${c.detail}`).join(" | ")}${notes.length ? ` | ${notes.join(", ")}` : ""}${keptSuffix}`);
       console.log(`  optimized: ${JSON.stringify(response.optimized?.slice(0, 260))}`);
       failures.push(`${seed.name}: ${failed.map((c) => `${c.name}: ${c.detail}`).join(" | ")}`);
     }
   }
 
   console.log(`\n${passCount}/${seeds.length} seeds passed. Avg latency ${(latencyTotal / seeds.length / 1000).toFixed(1)}s per seed.`);
+  const counts = keptCounts(rows);
+  console.log(
+    `Original kept: ${counts.kept} of ${counts.total} (failed verification: ${counts.failed}, not clearly better: ${counts.marginal}).`,
+  );
+  const keptNames = rows.filter((r) => r.kept).map((r) => r.seed);
+  if (keptNames.length > 0) console.log(`Kept: ${keptNames.join(", ")}`);
+
+  if (out) writeFileSync(out, JSON.stringify({ base, date: new Date().toISOString(), rows }, null, 2));
+  if (baselineFile) {
+    // Informational only: a missing or broken baseline never changes the exit code.
+    try {
+      const baseline = JSON.parse(readFileSync(baselineFile, "utf8")) as { rows?: EvalRow[] };
+      if (!Array.isArray(baseline.rows)) throw new Error("no rows array");
+      console.log(`\nAgainst baseline ${baselineFile}:\n${formatChanges(compareRuns(baseline.rows, rows))}`);
+    } catch (err) {
+      console.log(`\nBaseline ${baselineFile} not read (${err instanceof Error ? err.message : String(err)}); skipping the comparison.`);
+    }
+  }
+
   if (failures.length > 0) {
     console.log("\nFailures:");
     for (const f of failures) console.log(`- ${f}`);

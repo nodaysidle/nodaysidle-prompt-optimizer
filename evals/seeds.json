@@ -470,7 +470,7 @@
     "name": "numbered-steps-to-brief",
     "kind": "user",
     "mode": "structured",
-    "prompt": "fix the flaky checkout test. steps i want: 1. reproduce it locally 2. find the race 3. fix it without adding sleeps 4. run the whole suite twice",
+    "prompt": "fix the flaky checkout test. steps i want:\n1. reproduce it locally\n2. find the race\n3. fix it without adding sleeps\n4. run the whole suite twice",
     "expect": {
       "mustRewrite": true,
       "containsAll": [

@@ -48,6 +48,8 @@ export const PREVIOUS_IDENTITY_LOCKS: Partial<Record<EngineTarget, string>> = {
     "Use the attached reference images as identity references. Keep each referenced subject's exact face, hair, skin tone, build, and clothing consistent throughout the video. Do not treat the references as literal frames unless the prompt asks for that.",
 };
 
+export const NO_SUMMARY = "The model gave no summary of its changes.";
+
 export function identityLockFor(engineTarget?: EngineTarget): string {
   return IDENTITY_LOCKS[engineTarget ?? "universal"];
 }
@@ -662,7 +664,7 @@ export function parseOptimizationResponse(
 
   let optimized = "";
   let negativePrompt: string | undefined = undefined;
-  let summary = "Prompt structure, clarity, and constraints optimized.";
+  let summary = NO_SUMMARY;
   let changes: string[] = [];
   let assumptions: string[] = [];
   let questions: string[] | undefined = undefined;

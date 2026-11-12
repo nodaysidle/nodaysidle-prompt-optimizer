@@ -235,6 +235,34 @@ describe("optimizePrompt pipeline", () => {
     expect(result.unresolvedQuestions).toContain("What tone should I use?");
   });
 
+  it("does not describe a section that shaping removed", async () => {
+    mockedChat.mockResolvedValue(
+      completion(
+        JSON.stringify({
+          optimized: "## Goal\nAdd a regression test for the login bug.\n\n## Deliverables\nA pull request with passing CI.",
+          questions: [],
+          summary: "Rebuilt as a brief with Goal and Deliverables. Kept the scope to the login bug.",
+          changes: ["Added a Deliverables section", "Stated the goal"],
+        }),
+      ),
+    );
+    mockedGate.mockResolvedValue({ intentPreserved: 0.95, overEngineered: 0.1, passed: true });
+
+    const result = await optimizePrompt({
+      prompt: "add a regression test for the login bug",
+      kind: "user",
+      mode: "structured",
+      deepseekApiKey: "sk-test",
+      model: "deepseek-v4.1-flash",
+      openrouterApiKey: "sk-or-test",
+    });
+
+    expect(result.optimized).toBe("## Goal\nAdd a regression test for the login bug.");
+    expect(result.summary).toBe("Kept the scope to the login bug.");
+    expect(result.summary).not.toContain("Deliverables");
+    expect(result.changes).toEqual(["Stated the goal"]);
+  });
+
   it("keeps the original when the rewrite passes but is not clearly better", async () => {
     const original = "List three uses of Rust's borrow checker.";
     mockedChat.mockResolvedValue(responseJson("List three practical uses of Rust's borrow checker."));

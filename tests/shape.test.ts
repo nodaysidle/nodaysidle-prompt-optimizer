@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { enforceFaithfulShape as shape, tidyQuestions } from "@/lib/shape";
+import { dropMentionsOfRemoved, enforceFaithfulShape as shape, tidyQuestions } from "@/lib/shape";
 
 const AUD = "make an audit of the repo in /dev/x/ and show me your findings";
 
@@ -53,6 +53,25 @@ describe("enforceFaithfulShape", () => {
   });
   it("ignores image prompts", () => {
     expect(shape("a dragon", "## Context\nx", "structured", "image", []).removed).toEqual([]);
+  });
+});
+
+describe("dropMentionsOfRemoved", () => {
+  it("drops summary sentences and changes that describe a removed section", () => {
+    const r = dropMentionsOfRemoved(
+      ["Deliverables", "Done when"],
+      "Rebuilt as a brief with Goal, Requirements, Deliverables and Done when. Kept the version numbers.",
+      ["Added a Done when line", "Grouped requirements"],
+    );
+    expect(r).toEqual({ summary: "Kept the version numbers.", changes: ["Grouped requirements"] });
+  });
+  it("returns the inputs unchanged when nothing was removed", () => {
+    const r = dropMentionsOfRemoved([], "Added Context. Kept numbers.", ["Added Context"]);
+    expect(r).toEqual({ summary: "Added Context. Kept numbers.", changes: ["Added Context"] });
+  });
+  it("leaves an empty summary when every sentence names a removed section", () => {
+    const r = dropMentionsOfRemoved(["Context"], "Added a Context section. Moved facts into context.", []);
+    expect(r.summary).toBe("");
   });
 });
 

@@ -1,6 +1,6 @@
 import { findFaithfulnessViolations } from "../faithfulness";
 import { completeAuditTask, isAuditTask } from "../agent-completion";
-import { enforceFaithfulShape, tidyQuestions } from "../shape";
+import { dropMentionsOfRemoved, enforceFaithfulShape, tidyQuestions } from "../shape";
 import {
   buildOptimizerMessages,
   buildRepairMessages,
@@ -11,6 +11,7 @@ import {
   identityLockFor,
   maskCodeBlocks,
   maxRewriteChars,
+  NO_SUMMARY,
   trimNearMiss,
   findPreservationViolations,
   isQuestionnairePrompt,
@@ -190,6 +191,9 @@ async function optimizePromptCore(params: OptimizeParams): Promise<OptimizationR
       if (shaped.removed.length) {
         parsed.optimized = shaped.optimized;
         parsed.assumptions = shaped.assumptions;
+        const described = dropMentionsOfRemoved(shaped.removed, parsed.summary, parsed.changes);
+        parsed.summary = described.summary || NO_SUMMARY;
+        parsed.changes = described.changes;
       }
       if (hasSubjectPrefix) {
         parsed.optimized = enforceIdentityLock(

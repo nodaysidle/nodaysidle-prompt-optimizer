@@ -155,6 +155,27 @@ export function enforceFaithfulShape(
       : { optimized: text, assumptions: kept, removed: [...removed, ...renamed] };
 }
 
+/** The model wrote its summary and change list before shaping, so drop what describes a removed section. */
+export function dropMentionsOfRemoved(
+  removed: readonly string[],
+  summary: string,
+  changes: readonly string[],
+): { summary: string; changes: string[] } {
+  if (removed.length === 0) return { summary, changes: [...changes] };
+  const mentions = removed.map(
+    (heading) => new RegExp(`\\b${heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+")}\\b`, "i"),
+  );
+  const mentionsRemoved = (text: string) => mentions.some((re) => re.test(text));
+  return {
+    summary: summary
+      .split(/(?<=[.!?])\s+/)
+      .filter((sentence) => !mentionsRemoved(sentence))
+      .join(" ")
+      .trim(),
+    changes: changes.filter((change) => !mentionsRemoved(change)),
+  };
+}
+
 const GENERIC_QUESTION_RE = /^what (?:result )?(?:counts as|is) (?:a )?success/i;
 const STOP_WORDS = new Set(["the", "a", "an", "or", "and", "of", "to", "be", "is", "it", "should", "this", "that", "for", "in", "on", "may", "any", "do", "does", "which", "what", "are", "you", "your", "my", "i", "only"]);
 

@@ -44,15 +44,15 @@ const IDENTITY_LOCKS: Record<string, string> = {
   universal:
     "Use the photo in the attachment as the only reference. Identity lock: exact likeness, facial geometry and proportions.",
   "nano-banana":
-    "Use the attached photo as the identity reference for the subject. Keep the subject's exact face, facial structure, skin tone, hair and apparent age the same as in the photo.",
+    "Use the attached photo as the identity reference for the subject. Keep the subject's exact face, facial structure and skin tone the same as in the photo, and the hair and apparent age too unless this prompt asks to change them.",
   "gpt-image":
-    "Image 1 is the identity reference for the subject. Keep the subject's exact face, facial structure, skin tone, hair and apparent age the same as in Image 1.",
+    "Image 1 is the identity reference for the subject. Keep the subject's exact face, facial structure and skin tone the same as in Image 1, and the hair and apparent age too unless this prompt asks to change them.",
   veo:
-    "Use the attached reference image as the subject reference. Keep the subject's exact face, facial structure, skin tone, hair and apparent age the same as in the reference throughout the shot. Use the reference for identity only, not as the opening frame.",
+    "Use the attached reference image as the subject reference. Keep the subject's exact face, facial structure and skin tone the same as in the reference throughout the shot, and the hair and apparent age too unless this prompt asks to change them. Use the reference for identity only, not as the opening frame, unless this prompt asks to start from it.",
   omni:
-    "Use the attached image as the identity reference for the subject. Keep the subject's exact face, hair, skin tone and build consistent throughout the video. Use the image for identity only, not as a literal frame.",
+    "Use the attached image as the identity reference for the subject. Keep the subject's exact face, skin tone and build consistent throughout the video, and the hair too unless this prompt asks to change it. Use the image for identity only, not as a literal frame, unless this prompt asks to start from it.",
   "omni-1.2":
-    "Use the attached reference images as identity references. Keep each referenced subject's exact face, hair, skin tone, build, and clothing consistent throughout the video. Do not treat the references as literal frames unless the prompt asks for that.",
+    "Use the attached reference images as identity references. Keep each referenced subject's exact face, hair, skin tone and build consistent throughout the video, and their clothing too unless this prompt describes other clothing. Do not treat the references as literal frames unless the prompt asks for that.",
 };
 
 const POLISH_DIACRITICS = /[ąćęłńóśźż]/i;

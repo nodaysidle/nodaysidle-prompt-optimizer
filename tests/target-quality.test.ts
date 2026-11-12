@@ -4,7 +4,14 @@ import { describe, expect, it } from "vitest";
 import { ENGINE_TARGETS } from "@/lib/types";
 import { PROFILES } from "@/lib/profiles";
 import { mapDiagnosticAnswers, runHeuristicDiagnostics } from "@/lib/decisions";
-import { buildOptimizerMessages, identityLockFor, preservationWarnings } from "@/lib/optimizer-prompt";
+import {
+  PREVIOUS_IDENTITY_LOCKS,
+  buildOptimizerMessages,
+  enforceIdentityLock,
+  identityLockFor,
+  preservationWarnings,
+  startsWithIdentityLock,
+} from "@/lib/optimizer-prompt";
 
 describe("target profiles drive visual structure", () => {
   it("never asks a video target for the bracket template", () => {
@@ -35,6 +42,52 @@ describe("target profiles drive visual structure", () => {
   it("keeps the eval's likeness lines in sync with the app", () => {
     const evalSource = readFileSync(join(__dirname, "../evals/run-eval.ts"), "utf8");
     for (const target of ENGINE_TARGETS) expect(evalSource).toContain(identityLockFor(target));
+  });
+});
+
+describe("likeness lock yields to what the prompt asks for", () => {
+  const RETIRED = [
+    ["nano-banana", ["skin tone, hair and apparent age the same", "the same as in the photo."]],
+    ["gpt-image", ["skin tone, hair and apparent age the same", "the same as in Image 1."]],
+    ["veo", ["skin tone, hair and apparent age the same", "not as the opening frame."]],
+    ["omni", ["exact face, hair, skin tone and build", "not as a literal frame."]],
+    ["omni-1.2", ["build, and clothing consistent"]],
+  ] as const;
+
+  for (const [target, dropped] of RETIRED) {
+    const kind = PROFILES[target].kinds.includes("video") ? "video" : "image";
+    const previous = PREVIOUS_IDENTITY_LOCKS[target] ?? "";
+
+    it(`replaces the previous ${target} lock from saved history with the current one`, () => {
+      expect(previous).not.toBe("");
+      const out = enforceIdentityLock(`${previous} A portrait at night.`, kind, target);
+      expect(out).toBe(`${identityLockFor(target)} A portrait at night.`);
+      expect(out.split(identityLockFor(target)).length - 1).toBe(1);
+      expect(out).not.toContain(previous);
+      for (const phrase of dropped) expect(out).not.toContain(phrase);
+    });
+
+    it(`recognises both the current and the previous ${target} lock`, () => {
+      expect(startsWithIdentityLock(`${identityLockFor(target)} x`, target)).toBe(true);
+      expect(startsWithIdentityLock(`${previous} x`, target)).toBe(true);
+    });
+  }
+
+  it("lets video targets start from the reference when asked", () => {
+    for (const target of ["veo", "omni"] as const)
+      expect(identityLockFor(target)).toContain("unless this prompt asks to start from it");
+  });
+
+  it("lets image targets change hair and age when asked, never the face", () => {
+    for (const target of ["nano-banana", "gpt-image"] as const) {
+      expect(identityLockFor(target)).toContain("unless this prompt asks to change them");
+      expect(identityLockFor(target)).toContain("exact face, facial structure and skin tone the same");
+    }
+  });
+
+  it("lets Omni 1.2 follow clothing the prompt describes", () => {
+    expect(identityLockFor("omni-1.2")).not.toContain("build, and clothing consistent");
+    expect(identityLockFor("omni-1.2")).toContain("their clothing too unless this prompt describes other clothing");
   });
 });
 

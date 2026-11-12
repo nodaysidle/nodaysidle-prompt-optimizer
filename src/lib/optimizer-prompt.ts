@@ -23,6 +23,20 @@ export const IDENTITY_LOCKS: Record<EngineTarget, string> = {
   universal:
     "Use the photo in the attachment as the only reference. Identity lock: exact likeness, facial geometry and proportions.",
   "nano-banana":
+    "Use the attached photo as the identity reference for the subject. Keep the subject's exact face, facial structure and skin tone the same as in the photo, and the hair and apparent age too unless this prompt asks to change them.",
+  "gpt-image":
+    "Image 1 is the identity reference for the subject. Keep the subject's exact face, facial structure and skin tone the same as in Image 1, and the hair and apparent age too unless this prompt asks to change them.",
+  veo:
+    "Use the attached reference image as the subject reference. Keep the subject's exact face, facial structure and skin tone the same as in the reference throughout the shot, and the hair and apparent age too unless this prompt asks to change them. Use the reference for identity only, not as the opening frame, unless this prompt asks to start from it.",
+  omni:
+    "Use the attached image as the identity reference for the subject. Keep the subject's exact face, skin tone and build consistent throughout the video, and the hair too unless this prompt asks to change it. Use the image for identity only, not as a literal frame, unless this prompt asks to start from it.",
+  "omni-1.2":
+    "Use the attached reference images as identity references. Keep each referenced subject's exact face, hair, skin tone and build consistent throughout the video, and their clothing too unless this prompt describes other clothing. Do not treat the references as literal frames unless the prompt asks for that.",
+};
+
+// Locks from before 2026-11-13, found in saved history.
+export const PREVIOUS_IDENTITY_LOCKS: Partial<Record<EngineTarget, string>> = {
+  "nano-banana":
     "Use the attached photo as the identity reference for the subject. Keep the subject's exact face, facial structure, skin tone, hair and apparent age the same as in the photo.",
   "gpt-image":
     "Image 1 is the identity reference for the subject. Keep the subject's exact face, facial structure, skin tone, hair and apparent age the same as in Image 1.",
@@ -38,10 +52,15 @@ export function identityLockFor(engineTarget?: EngineTarget): string {
   return IDENTITY_LOCKS[engineTarget ?? "universal"];
 }
 
-/** True when the text opens with this target's lock line, or the legacy one in saved history. */
+function staleLocksFor(engineTarget?: EngineTarget): string[] {
+  const previous = PREVIOUS_IDENTITY_LOCKS[engineTarget ?? "universal"];
+  return previous ? [LEGACY_IDENTITY_LOCK, previous] : [LEGACY_IDENTITY_LOCK];
+}
+
+/** True when the text opens with this target's lock line, or an older one in saved history. */
 export function startsWithIdentityLock(text: string, engineTarget?: EngineTarget): boolean {
   const trimmed = text.trim();
-  return trimmed.startsWith(identityLockFor(engineTarget)) || trimmed.startsWith(LEGACY_IDENTITY_LOCK);
+  return [identityLockFor(engineTarget), ...staleLocksFor(engineTarget)].some((lock) => trimmed.startsWith(lock));
 }
 
 /** A model-written lock sentence: mentions an attached photo/image/reference and identity or likeness. */
@@ -72,11 +91,10 @@ export function enforceIdentityLock(
   if (trimmed === prefix) return prefix;
   if (trimmed.startsWith(prefix)) return trimmed;
 
-  // Drop the legacy line or a model-written variation of the lock (up to its first three
+  // Drop an older lock line or a model-written variation of the lock (up to its first three
   // sentences), so the exact target line is never stacked on top of a near copy.
-  let remaining = trimmed.startsWith(LEGACY_IDENTITY_LOCK)
-    ? trimmed.slice(LEGACY_IDENTITY_LOCK.length).trim()
-    : trimmed;
+  const stale = staleLocksFor(engineTarget).find((lock) => trimmed.startsWith(lock));
+  let remaining = stale ? trimmed.slice(stale.length).trim() : trimmed;
   if (LOCKISH_SENTENCE_RE.test(remaining)) {
     remaining = remaining.replace(LOCKISH_SENTENCE_RE, "");
     for (let i = 0; i < 2 && LOCK_FOLLOW_ON_RE.test(remaining); i++)

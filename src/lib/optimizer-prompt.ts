@@ -191,6 +191,20 @@ export function maskCodeBlocks(text: string): string {
 const QUOTED_RE = /"([^"\n]{2,120})"|(?<![\p{L}\p{N}])'([^'\n]{2,120})'(?![\p{L}\p{N}])/gu;
 const NUMBER_RE = /\d+(?:[.,]\d+)*|\b\d+\b/g;
 
+function numberTokens(text: string): Set<string> {
+  const numbers = new Set<string>();
+  for (const match of text.matchAll(NUMBER_RE)) {
+    const digits = match[0].replace(/[^0-9]/g, "");
+    if (digits) numbers.add(digits);
+  }
+  return numbers;
+}
+
+/** Numbers the user wrote, minus list ordinals ("1.", "2)") that only number the lines. */
+function preservedNumbers(text: string): Set<string> {
+  return numberTokens(text.replace(/^\s*\d{1,2}[.)]\s+/gm, ""));
+}
+
 function normalizeForMatch(value: string): string {
   return value.replace(/\s+/g, " ").trim().toLowerCase();
 }
@@ -224,12 +238,7 @@ export function extractVerbatimRequirements(original: string): string[] {
     const span = (match[1] ?? match[2])?.trim();
     if (span) items.push(`quoted: ${span}`);
   }
-  const numbers = new Set<string>();
-  for (const match of original.matchAll(NUMBER_RE)) {
-    const digits = match[0].replace(/[^0-9]/g, "");
-    if (digits) numbers.add(digits);
-  }
-  for (const digits of [...numbers].slice(0, 10)) {
+  for (const digits of [...preservedNumbers(original)].slice(0, 10)) {
     items.push(`number: ${digits}`);
   }
   return [...new Set(Array.from(items, (i) => i.trim()))].slice(0, 14);
@@ -273,14 +282,9 @@ export function findPreservationViolations(rawOriginal: string, optimized: strin
     }
   }
 
-  const numbers = new Set<string>();
-  for (const match of original.matchAll(NUMBER_RE)) {
-    const digits = match[0].replace(/[^0-9]/g, "");
-    if (digits) numbers.add(digits);
-  }
-  const digitsOnly = optimized.replace(/[^0-9]/g, "");
-  for (const digits of numbers) {
-    if (!digitsOnly.includes(digits)) {
+  const kept = numberTokens(optimized);
+  for (const digits of preservedNumbers(original)) {
+    if (!kept.has(digits)) {
       violations.push(`number was altered or removed: ${digits}`);
     }
   }

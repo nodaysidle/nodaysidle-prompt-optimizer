@@ -107,6 +107,27 @@ describe("extractVerbatimRequirements / findPreservationViolations", () => {
     expect(extractVerbatimRequirements("Translate 'good morning' to French")).toContain("quoted: good morning");
   });
 
+  const numberViolations = (original: string, optimized: string) =>
+    findPreservationViolations(original, optimized).filter((v) => v.startsWith("number was altered or removed"));
+
+  it("does not treat list numbering as numbers to preserve", () => {
+    const original = "Steps:\n1. read the config\n2. fix the bug\n3. run tests";
+    expect(numberViolations(original, "## Workflow\n- Read the config.\n- Fix the bug.\n- Run tests.")).toEqual([]);
+    expect(extractVerbatimRequirements(original).filter((i) => i.startsWith("number:"))).toEqual([]);
+  });
+
+  it("matches numbers as whole tokens, not scattered digits", () => {
+    expect(numberViolations("keep it under 15 words", "Use 1 heading and 5 bullets.")).toEqual(["number was altered or removed: 15"]);
+  });
+
+  it("accepts numbers whose units are spaced differently", () => {
+    expect(numberViolations("p95 is 2.8s, target under 500ms", "Bring p95 from 2.8 s to under 500 ms.")).toEqual([]);
+  });
+
+  it("accepts a number written without its thousands separator", () => {
+    expect(numberViolations("budget is 1,000 dollars", "Budget: 1000 dollars.")).toEqual([]);
+  });
+
   it("still extracts a double-quoted span and flags its removal", () => {
     const original = 'Reply with "thanks for waiting" first.';
     expect(extractVerbatimRequirements(original)).toContain("quoted: thanks for waiting");

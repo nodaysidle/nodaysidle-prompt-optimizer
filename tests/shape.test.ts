@@ -32,6 +32,25 @@ describe("enforceFaithfulShape", () => {
     const out = "Audit.\n\n## Requirements\n- Read-only.";
     expect(shape(AUD, out, "creative", "user", ["Read-only."]).removed).toEqual([]);
   });
+  const LOGIN = "add login to my app. we use next-auth v4 with the Prisma adapter, next 15 and vitest";
+  it("keeps a Context section built from the user's own facts", () => {
+    const out = "## Goal\nAdd login to the app.\n\n## Context\n- next-auth v4 with the Prisma adapter\n- Next 15 and Vitest";
+    const r = shape(LOGIN, out, "structured", "user", []);
+    expect(r.removed).toEqual([]);
+    expect(r.optimized).toContain("next-auth v4");
+  });
+  it("drops a Context section the model invented", () => {
+    const out = "## Goal\nAdd login to the app.\n\n## Context\nThe project is a production web application used by paying customers.";
+    const r = shape(LOGIN, out, "structured", "user", []);
+    expect(r.removed).toEqual(["Context"]);
+    expect(r.optimized).toBe("## Goal\nAdd login to the app.");
+  });
+  it("keeps a Workflow that repeats the user's steps without a trigger word", () => {
+    const out = "## Goal\nRecover the job.\n\n## Workflow\n- Read the logs.\n- Find the failing job.\n- Restart it.";
+    const r = shape("read the logs, find the failing job, restart it", out, "structured", "user", []);
+    expect(r.removed).toEqual([]);
+    expect(r.optimized).toContain("## Workflow");
+  });
   it("ignores image prompts", () => {
     expect(shape("a dragon", "## Context\nx", "structured", "image", []).removed).toEqual([]);
   });

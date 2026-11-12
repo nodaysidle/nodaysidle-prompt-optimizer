@@ -15,6 +15,25 @@ const UNLICENSED: { heading: RegExp; licensedBy: RegExp }[] = [
 ];
 
 const HEADING_RE = /^#{1,3}\s*(.+?)\s*$/;
+// Share of a section body's tokens that must come from the user's prompt for it to count as theirs.
+const GROUNDED_SHARE = 0.6;
+
+function tokens(text: string): Set<string> {
+  return new Set(
+    text
+      .toLowerCase()
+      .split(/[^\p{L}\p{N}]+/u)
+      .filter((t) => /\d/.test(t) || t.length >= 4),
+  );
+}
+
+function isGrounded(body: string, sourceTokens: Set<string>): boolean {
+  const own = tokens(body);
+  if (own.size < 2) return false;
+  let hits = 0;
+  for (const t of own) if (sourceTokens.has(t)) hits++;
+  return hits / own.size >= GROUNDED_SHARE;
+}
 const ASSUMPTIONS_LABEL_RE = /^assumptions:\s*$/i;
 
 function splitSections(text: string): { lead: string; sections: Section[] } {
@@ -47,6 +66,7 @@ export interface ShapedRewrite {
  * text prompt gets no Context, Deliverables, Done when, Workflow, Evidence or Assumptions block the
  * user's own words did not license, and Allow additions keeps its assumptions in the assumptions
  * list; its in-body block is kept, relabelled Requirements, because the agent only sees the body.
+ * A section whose content mostly repeats the user's own words is licensed too.
  */
 export function enforceFaithfulShape(
   original: string,
@@ -60,6 +80,7 @@ export function enforceFaithfulShape(
   const renamed: string[] = [];
   const kept = [...assumptions];
   const source = original.replace(/```[\s\S]*?```/g, "");
+  const sourceTokens = tokens(source);
 
   const { lead, sections } = splitSections(optimized);
   const out: string[] = lead.trim() ? [lead.trimEnd()] : [];
@@ -76,7 +97,13 @@ export function enforceFaithfulShape(
       renamed.push(section.heading);
       continue;
     }
-    const drop = rule && (isAssumptions ? true : mode !== "creative" && !rule.licensedBy.test(source));
+    const drop =
+      rule &&
+      (isAssumptions
+        ? true
+        : mode !== "creative" &&
+          !rule.licensedBy.test(source) &&
+          !isGrounded(section.text.split("\n").slice(1).join("\n"), sourceTokens));
     if (!drop) {
       out.push(section.text.trimEnd());
       continue;

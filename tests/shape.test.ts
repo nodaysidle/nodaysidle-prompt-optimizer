@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { enforceFaithfulShape as shape, tidyQuestions } from "@/lib/shape";
+import { dropMentionsOfRemoved, enforceFaithfulShape as shape, tidyQuestions } from "@/lib/shape";
 
 const AUD = "make an audit of the repo in /dev/x/ and show me your findings";
 
@@ -32,8 +32,46 @@ describe("enforceFaithfulShape", () => {
     const out = "Audit.\n\n## Requirements\n- Read-only.";
     expect(shape(AUD, out, "creative", "user", ["Read-only."]).removed).toEqual([]);
   });
+  const LOGIN = "add login to my app. we use next-auth v4 with the Prisma adapter, next 15 and vitest";
+  it("keeps a Context section built from the user's own facts", () => {
+    const out = "## Goal\nAdd login to the app.\n\n## Context\n- next-auth v4 with the Prisma adapter\n- Next 15 and Vitest";
+    const r = shape(LOGIN, out, "structured", "user", []);
+    expect(r.removed).toEqual([]);
+    expect(r.optimized).toContain("next-auth v4");
+  });
+  it("drops a Context section the model invented", () => {
+    const out = "## Goal\nAdd login to the app.\n\n## Context\nThe project is a production web application used by paying customers.";
+    const r = shape(LOGIN, out, "structured", "user", []);
+    expect(r.removed).toEqual(["Context"]);
+    expect(r.optimized).toBe("## Goal\nAdd login to the app.");
+  });
+  it("keeps a Workflow that repeats the user's steps without a trigger word", () => {
+    const out = "## Goal\nRecover the job.\n\n## Workflow\n- Read the logs.\n- Find the failing job.\n- Restart it.";
+    const r = shape("read the logs, find the failing job, restart it", out, "structured", "user", []);
+    expect(r.removed).toEqual([]);
+    expect(r.optimized).toContain("## Workflow");
+  });
   it("ignores image prompts", () => {
     expect(shape("a dragon", "## Context\nx", "structured", "image", []).removed).toEqual([]);
+  });
+});
+
+describe("dropMentionsOfRemoved", () => {
+  it("drops summary sentences and changes that describe a removed section", () => {
+    const r = dropMentionsOfRemoved(
+      ["Deliverables", "Done when"],
+      "Rebuilt as a brief with Goal, Requirements, Deliverables and Done when. Kept the version numbers.",
+      ["Added a Done when line", "Grouped requirements"],
+    );
+    expect(r).toEqual({ summary: "Kept the version numbers.", changes: ["Grouped requirements"] });
+  });
+  it("returns the inputs unchanged when nothing was removed", () => {
+    const r = dropMentionsOfRemoved([], "Added Context. Kept numbers.", ["Added Context"]);
+    expect(r).toEqual({ summary: "Added Context. Kept numbers.", changes: ["Added Context"] });
+  });
+  it("leaves an empty summary when every sentence names a removed section", () => {
+    const r = dropMentionsOfRemoved(["Context"], "Added a Context section. Moved facts into context.", []);
+    expect(r.summary).toBe("");
   });
 });
 

@@ -92,6 +92,47 @@ describe("extractVerbatimRequirements / findPreservationViolations", () => {
     );
     expect(violations.some((v) => v === "code block was altered or removed")).toBe(true);
   });
+
+  const APOSTROPHES = "Write a reply to the customer's complaint. Don't apologise, it's their fault.";
+  it("does not read apostrophes as quoted text", () => {
+    expect(extractVerbatimRequirements(APOSTROPHES).filter((i) => i.startsWith("quoted:"))).toEqual([]);
+  });
+
+  it("does not flag a rephrased prompt that only has apostrophes", () => {
+    const violations = findPreservationViolations(APOSTROPHES, "Reply to the customer complaint without apologising; the fault is theirs.");
+    expect(violations.filter((v) => v.startsWith("quoted text"))).toEqual([]);
+  });
+
+  it("still extracts a single-quoted span", () => {
+    expect(extractVerbatimRequirements("Translate 'good morning' to French")).toContain("quoted: good morning");
+  });
+
+  const numberViolations = (original: string, optimized: string) =>
+    findPreservationViolations(original, optimized).filter((v) => v.startsWith("number was altered or removed"));
+
+  it("does not treat list numbering as numbers to preserve", () => {
+    const original = "Steps:\n1. read the config\n2. fix the bug\n3. run tests";
+    expect(numberViolations(original, "## Workflow\n- Read the config.\n- Fix the bug.\n- Run tests.")).toEqual([]);
+    expect(extractVerbatimRequirements(original).filter((i) => i.startsWith("number:"))).toEqual([]);
+  });
+
+  it("matches numbers as whole tokens, not scattered digits", () => {
+    expect(numberViolations("keep it under 15 words", "Use 1 heading and 5 bullets.")).toEqual(["number was altered or removed: 15"]);
+  });
+
+  it("accepts numbers whose units are spaced differently", () => {
+    expect(numberViolations("p95 is 2.8s, target under 500ms", "Bring p95 from 2.8 s to under 500 ms.")).toEqual([]);
+  });
+
+  it("accepts a number written without its thousands separator", () => {
+    expect(numberViolations("budget is 1,000 dollars", "Budget: 1000 dollars.")).toEqual([]);
+  });
+
+  it("still extracts a double-quoted span and flags its removal", () => {
+    const original = 'Reply with "thanks for waiting" first.';
+    expect(extractVerbatimRequirements(original)).toContain("quoted: thanks for waiting");
+    expect(findPreservationViolations(original, "Reply politely first.")).toContain('quoted text was altered or removed: "thanks for waiting"');
+  });
 });
 
 describe("parseOptimizationResponse", () => {

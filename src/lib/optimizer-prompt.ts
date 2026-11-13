@@ -23,6 +23,20 @@ export const IDENTITY_LOCKS: Record<EngineTarget, string> = {
   universal:
     "Use the photo in the attachment as the only reference. Identity lock: exact likeness, facial geometry and proportions.",
   "nano-banana":
+    "Use the attached photo as the identity reference for the subject. Keep the subject's exact face, facial structure and skin tone the same as in the photo, and the hair and apparent age too unless this prompt asks to change them.",
+  "gpt-image":
+    "Image 1 is the identity reference for the subject. Keep the subject's exact face, facial structure and skin tone the same as in Image 1, and the hair and apparent age too unless this prompt asks to change them.",
+  veo:
+    "Use the attached reference image as the subject reference. Keep the subject's exact face, facial structure and skin tone the same as in the reference throughout the shot, and the hair and apparent age too unless this prompt asks to change them. Use the reference for identity only, not as the opening frame, unless this prompt asks to start from it.",
+  omni:
+    "Use the attached image as the identity reference for the subject. Keep the subject's exact face, skin tone and build consistent throughout the video, and the hair too unless this prompt asks to change it. Use the image for identity only, not as a literal frame, unless this prompt asks to start from it.",
+  "omni-1.2":
+    "Use the attached reference images as identity references. Keep each referenced subject's exact face, hair, skin tone and build consistent throughout the video, and their clothing too unless this prompt describes other clothing. Do not treat the references as literal frames unless the prompt asks for that.",
+};
+
+// Locks from before 2026-11-13, found in saved history.
+export const PREVIOUS_IDENTITY_LOCKS: Partial<Record<EngineTarget, string>> = {
+  "nano-banana":
     "Use the attached photo as the identity reference for the subject. Keep the subject's exact face, facial structure, skin tone, hair and apparent age the same as in the photo.",
   "gpt-image":
     "Image 1 is the identity reference for the subject. Keep the subject's exact face, facial structure, skin tone, hair and apparent age the same as in Image 1.",
@@ -34,14 +48,21 @@ export const IDENTITY_LOCKS: Record<EngineTarget, string> = {
     "Use the attached reference images as identity references. Keep each referenced subject's exact face, hair, skin tone, build, and clothing consistent throughout the video. Do not treat the references as literal frames unless the prompt asks for that.",
 };
 
+export const NO_SUMMARY = "The model gave no summary of its changes.";
+
 export function identityLockFor(engineTarget?: EngineTarget): string {
   return IDENTITY_LOCKS[engineTarget ?? "universal"];
 }
 
-/** True when the text opens with this target's lock line, or the legacy one in saved history. */
+function staleLocksFor(engineTarget?: EngineTarget): string[] {
+  const previous = PREVIOUS_IDENTITY_LOCKS[engineTarget ?? "universal"];
+  return previous ? [LEGACY_IDENTITY_LOCK, previous] : [LEGACY_IDENTITY_LOCK];
+}
+
+/** True when the text opens with this target's lock line, or an older one in saved history. */
 export function startsWithIdentityLock(text: string, engineTarget?: EngineTarget): boolean {
   const trimmed = text.trim();
-  return trimmed.startsWith(identityLockFor(engineTarget)) || trimmed.startsWith(LEGACY_IDENTITY_LOCK);
+  return [identityLockFor(engineTarget), ...staleLocksFor(engineTarget)].some((lock) => trimmed.startsWith(lock));
 }
 
 /** A model-written lock sentence: mentions an attached photo/image/reference and identity or likeness. */
@@ -72,11 +93,10 @@ export function enforceIdentityLock(
   if (trimmed === prefix) return prefix;
   if (trimmed.startsWith(prefix)) return trimmed;
 
-  // Drop the legacy line or a model-written variation of the lock (up to its first three
+  // Drop an older lock line or a model-written variation of the lock (up to its first three
   // sentences), so the exact target line is never stacked on top of a near copy.
-  let remaining = trimmed.startsWith(LEGACY_IDENTITY_LOCK)
-    ? trimmed.slice(LEGACY_IDENTITY_LOCK.length).trim()
-    : trimmed;
+  const stale = staleLocksFor(engineTarget).find((lock) => trimmed.startsWith(lock));
+  let remaining = stale ? trimmed.slice(stale.length).trim() : trimmed;
   if (LOCKISH_SENTENCE_RE.test(remaining)) {
     remaining = remaining.replace(LOCKISH_SENTENCE_RE, "");
     for (let i = 0; i < 2 && LOCK_FOLLOW_ON_RE.test(remaining); i++)
@@ -187,8 +207,23 @@ const CODE_FENCE_RE = /```[a-zA-Z0-9_+-]*\n?([\s\S]*?)```/g;
 export function maskCodeBlocks(text: string): string {
   return text.replace(CODE_FENCE_RE, (_, body: string) => `[code block, ${body.trim().split("\n").length} lines, kept verbatim]`);
 }
-const QUOTED_RE = /"([^"\n]{2,120})"|'([^'\n]{2,120})'/g;
+// A single quote touching a letter or digit is an apostrophe ("it's", "customers'"), not a quotation mark.
+const QUOTED_RE = /"([^"\n]{2,120})"|(?<![\p{L}\p{N}])'([^'\n]{2,120})'(?![\p{L}\p{N}])/gu;
 const NUMBER_RE = /\d+(?:[.,]\d+)*|\b\d+\b/g;
+
+function numberTokens(text: string): Set<string> {
+  const numbers = new Set<string>();
+  for (const match of text.matchAll(NUMBER_RE)) {
+    const digits = match[0].replace(/[^0-9]/g, "");
+    if (digits) numbers.add(digits);
+  }
+  return numbers;
+}
+
+/** Numbers the user wrote, minus list ordinals ("1.", "2)") that only number the lines. */
+function preservedNumbers(text: string): Set<string> {
+  return numberTokens(text.replace(/^\s*\d{1,2}[.)]\s+/gm, ""));
+}
 
 function normalizeForMatch(value: string): string {
   return value.replace(/\s+/g, " ").trim().toLowerCase();
@@ -223,12 +258,7 @@ export function extractVerbatimRequirements(original: string): string[] {
     const span = (match[1] ?? match[2])?.trim();
     if (span) items.push(`quoted: ${span}`);
   }
-  const numbers = new Set<string>();
-  for (const match of original.matchAll(NUMBER_RE)) {
-    const digits = match[0].replace(/[^0-9]/g, "");
-    if (digits) numbers.add(digits);
-  }
-  for (const digits of [...numbers].slice(0, 10)) {
+  for (const digits of [...preservedNumbers(original)].slice(0, 10)) {
     items.push(`number: ${digits}`);
   }
   return [...new Set(Array.from(items, (i) => i.trim()))].slice(0, 14);
@@ -272,14 +302,9 @@ export function findPreservationViolations(rawOriginal: string, optimized: strin
     }
   }
 
-  const numbers = new Set<string>();
-  for (const match of original.matchAll(NUMBER_RE)) {
-    const digits = match[0].replace(/[^0-9]/g, "");
-    if (digits) numbers.add(digits);
-  }
-  const digitsOnly = optimized.replace(/[^0-9]/g, "");
-  for (const digits of numbers) {
-    if (!digitsOnly.includes(digits)) {
+  const kept = numberTokens(optimized);
+  for (const digits of preservedNumbers(original)) {
+    if (!kept.has(digits)) {
       violations.push(`number was altered or removed: ${digits}`);
     }
   }
@@ -639,7 +664,7 @@ export function parseOptimizationResponse(
 
   let optimized = "";
   let negativePrompt: string | undefined = undefined;
-  let summary = "Prompt structure, clarity, and constraints optimized.";
+  let summary = NO_SUMMARY;
   let changes: string[] = [];
   let assumptions: string[] = [];
   let questions: string[] | undefined = undefined;

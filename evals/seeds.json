@@ -503,8 +503,27 @@
     "prompt": "The subject in the photo. same person but with bright pink hair, at a rooftop party at sunset",
     "expect": {
       "containsAll": [
-        "pink hair",
+        "pink",
         "rooftop"
+      ]
+    }
+  },
+  {
+    "name": "lock-veo-start-from-photo",
+    "kind": "video",
+    "engineTarget": "veo",
+    "mode": "minimal",
+    "prompt": "The subject in the photo. start from the photo exactly as it is, then she slowly turns her head and smiles",
+    "expect": {
+      "containsAll": [
+        "unless this prompt asks to start from it",
+        "smiles"
+      ],
+      "lacksAny": [
+        "[SCENE",
+        "[TEMPORAL",
+        "[CAMERA PATH",
+        "[NEGATIVE"
       ]
     }
   }

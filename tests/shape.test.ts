@@ -2,6 +2,25 @@ import { describe, expect, it } from "vitest";
 import { dropMentionsOfRemoved, enforceFaithfulShape as shape, tidyQuestions } from "@/lib/shape";
 
 const AUD = "make an audit of the repo in /dev/x/ and show me your findings";
+const PAYMENTS =
+  "Go through the payments service, it's in services/payments, and clean up the retry logic because there's three different backoff implementations. Don't change the public API and don't touch the webhook handler.";
+const PAYMENTS_BRIEF = [
+  "## Goal",
+  "Clean up the retry logic in the payments service at `services/payments`, which currently has three different backoff implementations.",
+  "",
+  "## Context",
+  "- The service lives at `services/payments`.",
+  "- There are three different backoff implementations in the retry logic.",
+  "",
+  "## Constraints",
+  "- Do not change the public API.",
+  "- Do not touch the webhook handler.",
+  "",
+  "## Done when",
+  "- The retry logic in `services/payments` uses a single backoff implementation instead of three.",
+  "- The public API is unchanged.",
+  "- The webhook handler is untouched.",
+].join("\n");
 
 describe("enforceFaithfulShape", () => {
   it("drops unlicensed Context, Deliverables and Done when in structured mode", () => {
@@ -50,6 +69,16 @@ describe("enforceFaithfulShape", () => {
     const r = shape("read the logs, find the failing job, restart it", out, "structured", "user", []);
     expect(r.removed).toEqual([]);
     expect(r.optimized).toContain("## Workflow");
+  });
+  it("drops a Done when that only restates the brief's own constraints", () => {
+    const r = shape(PAYMENTS, PAYMENTS_BRIEF, "structured", "user", []);
+    expect(r.removed).toEqual(["Done when"]);
+    expect(r.optimized).toContain("## Context");
+    expect(r.optimized).toContain("## Constraints");
+  });
+  it("keeps a Done when the user stated as a success condition", () => {
+    const r = shape("fix the login bug. done when the e2e suite passes", "## Goal\nFix the login bug.\n\n## Done when\n- The e2e suite passes.", "structured", "user", []);
+    expect(r.removed).toEqual([]);
   });
   it("ignores image prompts", () => {
     expect(shape("a dragon", "## Context\nx", "structured", "image", []).removed).toEqual([]);

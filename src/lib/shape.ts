@@ -5,10 +5,11 @@ interface Section {
   text: string;
 }
 
-const UNLICENSED: { heading: RegExp; licensedBy: RegExp }[] = [
+// wordsOnly: licensed by the trigger words alone, since restating other sections is not a success condition.
+const UNLICENSED: { heading: RegExp; licensedBy: RegExp; wordsOnly?: true }[] = [
   { heading: /^context$/i, licensedBy: /\b(?:context|background)\b/i },
   { heading: /^deliverables?$/i, licensedBy: /\bdeliver|\boutput\b|\bformat\b/i },
-  { heading: /^done when$/i, licensedBy: /\bdone when\b|\bsuccess\b|\buntil\b/i },
+  { heading: /^done when$/i, licensedBy: /\bdone when\b|\bsuccess\b|\buntil\b/i, wordsOnly: true },
   { heading: /^workflow$/i, licensedBy: /\bstep|\bworkflow\b|\bfirst\b.*\bthen\b/i },
   { heading: /^evidence$/i, licensedBy: /\bevidence\b|\bcite\b|\bproof\b/i },
   { heading: /^assumptions$/i, licensedBy: /\bassum/i },
@@ -66,7 +67,7 @@ export interface ShapedRewrite {
  * text prompt gets no Context, Deliverables, Done when, Workflow, Evidence or Assumptions block the
  * user's own words did not license, and Allow additions keeps its assumptions in the assumptions
  * list; its in-body block is kept, relabelled Requirements, because the agent only sees the body.
- * A section whose content mostly repeats the user's own words is licensed too.
+ * A section whose content mostly repeats the user's own words is licensed too, except Done when.
  */
 export function enforceFaithfulShape(
   original: string,
@@ -103,7 +104,7 @@ export function enforceFaithfulShape(
         ? true
         : mode !== "creative" &&
           !rule.licensedBy.test(source) &&
-          !isGrounded(section.text.split("\n").slice(1).join("\n"), sourceTokens));
+          (rule.wordsOnly || !isGrounded(section.text.split("\n").slice(1).join("\n"), sourceTokens)));
     if (!drop) {
       out.push(section.text.trimEnd());
       continue;

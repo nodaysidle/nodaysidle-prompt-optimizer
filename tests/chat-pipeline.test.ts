@@ -7,7 +7,6 @@ vi.mock("@/lib/providers/deepseek", () => ({
 }));
 
 vi.mock("@/lib/decisions", () => ({
-  MIN_IMPROVEMENT: 0.45,
   runDiagnostics: vi.fn(),
   runQualityGate: vi.fn(),
 }));
@@ -266,11 +265,12 @@ describe("optimizePrompt pipeline", () => {
   it("keeps the original when the rewrite passes but is not clearly better", async () => {
     const original = "List three uses of Rust's borrow checker.";
     mockedChat.mockResolvedValue(responseJson("List three practical uses of Rust's borrow checker."));
-    mockedGate.mockResolvedValue({ intentPreserved: 0.95, overEngineered: 0.1, improvement: 0.2, passed: true });
+    mockedGate.mockResolvedValue({ intentPreserved: 0.95, overEngineered: 0.1, improvement: 0.1, passed: true });
 
     const result = await optimizePrompt({
       prompt: original,
       kind: "user",
+      mode: "structured",
       deepseekApiKey: "sk-test",
       model: "deepseek-v4.1-flash",
       openrouterApiKey: "sk-or-test",
@@ -300,6 +300,48 @@ describe("optimizePrompt pipeline", () => {
     expect(result.optimized).toBe(original);
     expect(result.summary.startsWith("No changes were proposed")).toBe(true);
     expect(result.rejectedDraft).toBeUndefined();
+  });
+
+  it("accepts a small safe edit in Light edit even when the judge sees little improvement", async () => {
+    const draft = "List three practical uses of Rust's borrow checker.";
+    mockedChat.mockResolvedValue(responseJson(draft));
+    mockedGate.mockResolvedValue({ intentPreserved: 0.95, overEngineered: 0.1, improvement: 0.1, passed: true });
+
+    const result = await optimizePrompt({
+      prompt: "List three uses of Rust's borrow checker.",
+      kind: "user",
+      deepseekApiKey: "sk-test",
+      model: "deepseek-v4.1-flash",
+      openrouterApiKey: "sk-or-test",
+    });
+
+    expect(result.optimized).toBe(draft);
+    expect(result.rejectedDraft).toBeUndefined();
+  });
+
+  it("holds Restructure to a low clearly-better bar", async () => {
+    const original = "List three uses of Rust's borrow checker.";
+    const draft = "List three practical uses of Rust's borrow checker.";
+    const run = async (improvement: number) => {
+      mockedChat.mockResolvedValue(responseJson(draft));
+      mockedGate.mockResolvedValue({ intentPreserved: 0.95, overEngineered: 0.1, improvement, passed: true });
+      return optimizePrompt({
+        prompt: original,
+        kind: "user",
+        mode: "structured",
+        deepseekApiKey: "sk-test",
+        model: "deepseek-v4.1-flash",
+        openrouterApiKey: "sk-or-test",
+      });
+    };
+
+    const accepted = await run(0.25);
+    expect(accepted.optimized).toBe(draft);
+    expect(accepted.rejectedDraft).toBeUndefined();
+
+    const kept = await run(0.15);
+    expect(kept.optimized).toBe(original);
+    expect(kept.rejectedDraft?.reason).toBe("marginal");
   });
 
   it("returns the rewrite when Decision-1 sees a clear improvement", async () => {

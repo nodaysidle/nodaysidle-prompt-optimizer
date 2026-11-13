@@ -15,14 +15,17 @@ const ADDITIONS: Addition[] = [
   { label: "a commit step", appears: /\bcommit\b/i, assumed: /commit/i },
 ];
 
-const FAITHFUL_FORBIDDEN: { label: string; re: RegExp }[] = [
-  { label: "a read-only or do-not-modify rule", re: /\bread-only\b|\bdo not (?:modify|edit)\b/i },
+// Any prohibition on changing things the user wrote licenses its restatement as "do not change/modify".
+const PROHIBITION = /\bdo not (?:rename|change|modify|edit|touch|alter|break)\b|\b(?:keep|leave)\b[^.\n]*\b(?:unchanged|as is|as it is|alone|intact)\b|\bread-only\b/i;
+
+const FAITHFUL_FORBIDDEN: { label: string; re: RegExp; licensedBy?: RegExp }[] = [
+  { label: "a read-only or do-not-modify rule", re: /\bread-only\b|\bdo not (?:modify|edit)\b/i, licensedBy: PROHIBITION },
   { label: "an Assumptions block", re: /^#{1,3}\s*assumptions\b|^assumptions:/im },
   { label: "a Workflow block", re: /^#{1,3}\s*workflow\b|^workflow:/im },
   { label: "a stop condition", re: /\bstop and report\b/i },
   { label: "an evidence rule", re: /\bcite\b[^.\n]*\b(?:file|line|path)/i },
   { label: "a readiness claim", re: /\bready[- ]to[- ]send\b/i },
-  { label: "a keep-unchanged constraint", re: /\b(?:keep|leave)\b[^.\n]*\bunchanged\b|\bdo not (?:rename|change)\b/i },
+  { label: "a keep-unchanged constraint", re: /\b(?:keep|leave)\b[^.\n]*\bunchanged\b|\bdo not (?:rename|change)\b/i, licensedBy: PROHIBITION },
 ];
 
 const PATH_RE = /(?:~|\.{0,2})?\/[\w.\-]+(?:\/[\w.\-]+)+\/?/g;
@@ -60,8 +63,9 @@ export function findFaithfulnessViolations(
     out.push("added a persona the user did not write");
 
   if (mode !== "creative") {
-    for (const { label, re } of FAITHFUL_FORBIDDEN) {
-      if (re.test(result) && !re.test(source)) out.push(`added ${label} in a mode that must stay faithful`);
+    const prohibitions = source.replace(/\b(?:don['’]?t|never|must not|mustn['’]t|should not|shouldn['’]t|cannot|can['’]t)\b/gi, "do not");
+    for (const { label, re, licensedBy } of FAITHFUL_FORBIDDEN) {
+      if (re.test(result) && !re.test(source) && !licensedBy?.test(prohibitions)) out.push(`added ${label} in a mode that must stay faithful`);
     }
     return out;
   }

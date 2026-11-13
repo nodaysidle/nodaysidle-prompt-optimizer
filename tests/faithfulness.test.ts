@@ -42,4 +42,20 @@ describe("faithfulness guardrails", () => {
   it("flags an added keep-unchanged constraint", () => {
     expect(check("fix the bug in my function", "Fix the bug.\n- Keep the function name `total` unchanged.", "structured", "user").join()).toMatch(/unchanged/);
   });
+  it("does not flag a restated prohibition the user wrote with don't", () => {
+    const out = "## Goal\nClean up the payments service.\n\n## Constraints\n- Do not change the public API.\n- Do not modify the webhook handler.";
+    expect(check("Go through the payments service. Don't change the public API and don't touch the webhook handler.", out, "structured", "user").join()).not.toMatch(/keep-unchanged|do-not-modify/);
+  });
+  it("does not flag a restated prohibition the user wrote with never", () => {
+    expect(check("refactor the parser, never rename the exported functions", "Refactor the parser.\n- Do not rename the exported functions.", "structured", "user").join()).not.toMatch(/keep-unchanged|do-not-modify/);
+  });
+  it("does not flag keep unchanged when the user said leave it alone", () => {
+    expect(check("leave the config file alone and tidy the README", "Tidy the README.\n- Keep the config file unchanged.", "structured", "user").join()).not.toMatch(/keep-unchanged|do-not-modify/);
+  });
+  it("still flags a do-not-change rule the user did not write", () => {
+    expect(check("tidy the README", "Tidy the README.\n- Do not change the code.", "structured", "user").join()).toMatch(/keep-unchanged/);
+  });
+  it("still flags a do-not-modify rule the user did not write", () => {
+    expect(check("tidy the README", "Tidy the README.\n- Do not modify other files.", "structured", "user").join()).toMatch(/do-not-modify/);
+  });
 });

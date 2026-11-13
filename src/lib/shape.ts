@@ -204,7 +204,7 @@ export function dropRepeatedBriefItems(optimized: string): { optimized: string; 
   const removed: string[] = [];
   let dropped = false;
 
-  const keepLines = (lines: string[], isConstraints: boolean): string[] =>
+  const keepLines = (lines: string[], isProtected: boolean): string[] =>
     lines.filter((line) => {
       const bullet = BULLET_RE.exec(line);
       if (!bullet) {
@@ -213,7 +213,7 @@ export function dropRepeatedBriefItems(optimized: string): { optimized: string; 
         return true;
       }
       const own = stemmedTokens(bullet[1]);
-      if (!isConstraints && own.size >= 2 && earlier.some((item) => restates(bullet[1], own, item))) {
+      if (!isProtected && own.size >= 2 && earlier.some((item) => restates(bullet[1], own, item))) {
         dropped = true;
         return false;
       }
@@ -224,7 +224,8 @@ export function dropRepeatedBriefItems(optimized: string): { optimized: string; 
   const out = [keepLines(lead.split("\n"), false).join("\n")];
   for (const section of sections) {
     const [headingLine, ...body] = section.text.split("\n");
-    const kept = keepLines(body, /^constraints?$/i.test(section.heading));
+    // Hard limits stay explicit and workflow steps carry order, so neither is ever dropped.
+    const kept = keepLines(body, /^(?:constraints?|workflow)$/i.test(section.heading));
     const emptied = kept.length < body.length && !kept.some((line) => line.trim());
     if (emptied) removed.push(section.heading);
     else out.push([headingLine, ...kept].join("\n"));

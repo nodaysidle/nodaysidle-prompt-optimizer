@@ -157,6 +157,10 @@ describe("dropRepeatedBriefItems", () => {
     const out = "## Goal\nKeep the public API unchanged.\n\n## Requirements\n- Unchanged.\n\n## Constraints\n- Keep the public API unchanged.";
     expect(dedupe(out)).toEqual({ optimized: out, removed: [] });
   });
+  it("never drops Workflow steps the Goal already lists", () => {
+    const out = "## Goal\nRead the logs, find the failing job and restart it.\n\n## Workflow\n- Read the logs.\n- Find the failing job.\n- Restart it.";
+    expect(dedupe(out)).toEqual({ optimized: out, removed: [] });
+  });
   it("returns a brief with no repeats unchanged", () => {
     const out = "## Goal\nAdd login.\n\n## Requirements\n- Use email magic links.\n- Tests must pass.";
     expect(dedupe(out)).toEqual({ optimized: out, removed: [] });

@@ -10,12 +10,13 @@ export interface GateThresholds {
 }
 
 /**
- * Light edit keeps the strict line. Restructure and creative add headings and length on purpose,
- * so the verbosity ceiling and the "clearly better" bar are looser there. Intent stays at 0.7 everywhere.
+ * Light edit keeps the strict verbosity line but has no "clearly better" bar: a small safe edit is the
+ * point of that mode and every edit can be reverted. Restructure keeps a low bar. Restructure and creative
+ * add headings and length on purpose, so their verbosity ceiling is looser. Intent stays at 0.7 everywhere.
  */
 export const GATE_BY_MODE: Record<OptimizationMode, GateThresholds> = {
-  minimal: { intentPreserved: 0.7, overEngineered: 0.4, maxInvented: 0.4, minImprovement: 0.45 },
-  structured: { intentPreserved: 0.7, overEngineered: 0.55, maxInvented: 0.4, minImprovement: 0.35 },
+  minimal: { intentPreserved: 0.7, overEngineered: 0.4, maxInvented: 0.4, minImprovement: 0 },
+  structured: { intentPreserved: 0.7, overEngineered: 0.55, maxInvented: 0.4, minImprovement: 0.2 },
   creative: { intentPreserved: 0.7, overEngineered: 0.55, maxInvented: 0.65, minImprovement: 0.35 },
 };
 

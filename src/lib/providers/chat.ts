@@ -327,15 +327,18 @@ async function optimizePromptCore(params: OptimizeParams): Promise<OptimizationR
   const isMarginal = (gate?: QualityGateResult) =>
     gate?.improvement !== undefined && gate.improvement < limits.minImprovement;
 
-  const returnMarginal = (draft: ParsedRewrite, gate: QualityGateResult): OptimizationResult => {
-    const unchanged = draft.optimized.trim() === original().trim();
+  // A bar of 0 never marks a draft marginal, so an unchanged draft is checked on its own.
+  const isUnchanged = (draft: ParsedRewrite) => draft.optimized.trim() === original().trim();
+
+  const returnMarginal = (draft: ParsedRewrite, gate: QualityGateResult | undefined): OptimizationResult => {
+    const unchanged = isUnchanged(draft);
     const rejectedDraft: RejectedDraft | undefined = unchanged
       ? undefined
       : {
           optimized: draft.optimized,
           negativePrompt: draft.negativePrompt,
           reason: "marginal",
-          problems: [`only ${Math.round((gate.improvement ?? 0) * 100)}% likely to work better than your original`],
+          problems: [`only ${Math.round((gate?.improvement ?? 0) * 100)}% likely to work better than your original`],
         };
     return {
       optimized: original(),
@@ -380,8 +383,8 @@ async function optimizePromptCore(params: OptimizeParams): Promise<OptimizationR
   params.onStage?.("verify");
   const firstVerification = await verify(first.optimized, first.assumptions);
 
-  if (firstVerification.passed && isMarginal(firstVerification.gate)) {
-    return returnMarginal(first, firstVerification.gate!);
+  if (firstVerification.passed && (isUnchanged(first) || isMarginal(firstVerification.gate))) {
+    return returnMarginal(first, firstVerification.gate);
   }
   if (firstVerification.passed) return accept(first, firstVerification.gate);
 
@@ -394,8 +397,8 @@ async function optimizePromptCore(params: OptimizeParams): Promise<OptimizationR
   params.onStage?.("verify");
   const repairedVerification = await verify(repaired.optimized, repaired.assumptions);
 
-  if (repairedVerification.passed && isMarginal(repairedVerification.gate)) {
-    return returnMarginal(repaired, repairedVerification.gate!);
+  if (repairedVerification.passed && (isUnchanged(repaired) || isMarginal(repairedVerification.gate))) {
+    return returnMarginal(repaired, repairedVerification.gate);
   }
   if (repairedVerification.passed) return accept(repaired, repairedVerification.gate);
 

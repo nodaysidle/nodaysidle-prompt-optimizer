@@ -262,6 +262,25 @@ describe("optimizePrompt pipeline", () => {
     expect(result.changes).toEqual(["Stated the goal"]);
   });
 
+  it("drops a brief bullet that repeats the Goal in Restructure only", async () => {
+    const brief = "## Goal\nAdd login using email magic links.\n\n## Requirements\n- Login uses email magic links.\n- Tests must pass.";
+    mockedChat.mockResolvedValue(responseJson(brief));
+    mockedGate.mockResolvedValue({ intentPreserved: 0.95, overEngineered: 0.1, passed: true });
+    const params = {
+      prompt: "add login with email magic links. tests must pass",
+      kind: "user" as const,
+      deepseekApiKey: "sk-test",
+      model: "deepseek-v4.1-flash" as const,
+      openrouterApiKey: "sk-or-test",
+    };
+
+    const structured = await optimizePrompt({ ...params, mode: "structured" });
+    expect(structured.optimized).toBe("## Goal\nAdd login using email magic links.\n\n## Requirements\n- Tests must pass.");
+
+    const light = await optimizePrompt(params);
+    expect(light.optimized).toBe(brief);
+  });
+
   it("keeps the original when the rewrite passes but is not clearly better", async () => {
     const original = "List three uses of Rust's borrow checker.";
     mockedChat.mockResolvedValue(responseJson("List three practical uses of Rust's borrow checker."));

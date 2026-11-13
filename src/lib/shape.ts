@@ -5,10 +5,11 @@ interface Section {
   text: string;
 }
 
-const UNLICENSED: { heading: RegExp; licensedBy: RegExp }[] = [
+// wordsOnly: licensed by the trigger words alone, since restating other sections is not a success condition.
+const UNLICENSED: { heading: RegExp; licensedBy: RegExp; wordsOnly?: true }[] = [
   { heading: /^context$/i, licensedBy: /\b(?:context|background)\b/i },
   { heading: /^deliverables?$/i, licensedBy: /\bdeliver|\boutput\b|\bformat\b/i },
-  { heading: /^done when$/i, licensedBy: /\bdone when\b|\bsuccess\b|\buntil\b/i },
+  { heading: /^done when$/i, licensedBy: /\bdone when\b|\bsuccess\b|\buntil\b/i, wordsOnly: true },
   { heading: /^workflow$/i, licensedBy: /\bstep|\bworkflow\b|\bfirst\b.*\bthen\b/i },
   { heading: /^evidence$/i, licensedBy: /\bevidence\b|\bcite\b|\bproof\b/i },
   { heading: /^assumptions$/i, licensedBy: /\bassum/i },
@@ -66,7 +67,7 @@ export interface ShapedRewrite {
  * text prompt gets no Context, Deliverables, Done when, Workflow, Evidence or Assumptions block the
  * user's own words did not license, and Allow additions keeps its assumptions in the assumptions
  * list; its in-body block is kept, relabelled Requirements, because the agent only sees the body.
- * A section whose content mostly repeats the user's own words is licensed too.
+ * A section whose content mostly repeats the user's own words is licensed too, except Done when.
  */
 export function enforceFaithfulShape(
   original: string,
@@ -103,7 +104,7 @@ export function enforceFaithfulShape(
         ? true
         : mode !== "creative" &&
           !rule.licensedBy.test(source) &&
-          !isGrounded(section.text.split("\n").slice(1).join("\n"), sourceTokens));
+          (rule.wordsOnly || !isGrounded(section.text.split("\n").slice(1).join("\n"), sourceTokens)));
     if (!drop) {
       out.push(section.text.trimEnd());
       continue;
@@ -174,6 +175,63 @@ export function dropMentionsOfRemoved(
       .trim(),
     changes: changes.filter((change) => !mentionsRemoved(change)),
   };
+}
+
+// Share of a bullet's tokens one earlier line must hold for the bullet to count as a restatement.
+const REPEAT_SHARE = 0.8;
+const NEGATION_RE = /\b(?:not|no|never|without|cannot)\b|n['’]t\b/i;
+const BULLET_RE = /^\s*(?:[-*]|\d+\.)\s+(.+)$/;
+
+function stemmedTokens(text: string): Set<string> {
+  return new Set([...tokens(text)].map((t) => (t.length > 4 ? t.replace(/s$/, "") : t)));
+}
+
+function restates(bullet: string, own: Set<string>, earlier: { text: string; tokens: Set<string> }): boolean {
+  if (NEGATION_RE.test(bullet) && !NEGATION_RE.test(earlier.text)) return false;
+  let hits = 0;
+  for (const t of own) {
+    if (earlier.tokens.has(t)) hits++;
+    else if (/\d/.test(t)) return false;
+  }
+  return hits / own.size >= REPEAT_SHARE;
+}
+
+/** Removes brief bullets that only restate an earlier line; returns headings of sections left empty. */
+export function dropRepeatedBriefItems(optimized: string): { optimized: string; removed: string[] } {
+  if (optimized.includes("```")) return { optimized, removed: [] };
+  const { lead, sections } = splitSections(optimized);
+  const earlier: { text: string; tokens: Set<string> }[] = [];
+  const removed: string[] = [];
+  let dropped = false;
+
+  const keepLines = (lines: string[], isProtected: boolean): string[] =>
+    lines.filter((line) => {
+      const bullet = BULLET_RE.exec(line);
+      if (!bullet) {
+        for (const sentence of line.split(/(?<=[.!?])\s+/))
+          if (sentence.trim()) earlier.push({ text: sentence, tokens: stemmedTokens(sentence) });
+        return true;
+      }
+      const own = stemmedTokens(bullet[1]);
+      if (!isProtected && own.size >= 2 && earlier.some((item) => restates(bullet[1], own, item))) {
+        dropped = true;
+        return false;
+      }
+      earlier.push({ text: bullet[1], tokens: own });
+      return true;
+    });
+
+  const out = [keepLines(lead.split("\n"), false).join("\n")];
+  for (const section of sections) {
+    const [headingLine, ...body] = section.text.split("\n");
+    // Hard limits stay explicit and workflow steps carry order, so neither is ever dropped.
+    const kept = keepLines(body, /^(?:constraints?|workflow)$/i.test(section.heading));
+    const emptied = kept.length < body.length && !kept.some((line) => line.trim());
+    if (emptied) removed.push(section.heading);
+    else out.push([headingLine, ...kept].join("\n"));
+  }
+  if (!dropped) return { optimized, removed: [] };
+  return { optimized: out.join("\n").replace(/\n{3,}/g, "\n\n").trim(), removed };
 }
 
 const GENERIC_QUESTION_RE = /^what (?:result )?(?:counts as|is) (?:a )?success/i;

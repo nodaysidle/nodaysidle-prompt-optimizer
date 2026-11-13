@@ -1,6 +1,6 @@
 import { findFaithfulnessViolations } from "../faithfulness";
 import { completeAuditTask, isAuditTask } from "../agent-completion";
-import { dropMentionsOfRemoved, enforceFaithfulShape, tidyQuestions } from "../shape";
+import { dropMentionsOfRemoved, dropRepeatedBriefItems, enforceFaithfulShape, tidyQuestions } from "../shape";
 import {
   buildOptimizerMessages,
   buildRepairMessages,
@@ -194,6 +194,15 @@ async function optimizePromptCore(params: OptimizeParams): Promise<OptimizationR
         const described = dropMentionsOfRemoved(shaped.removed, parsed.summary, parsed.changes);
         parsed.summary = described.summary || NO_SUMMARY;
         parsed.changes = described.changes;
+      }
+      if (mode === "structured" && (params.kind === "user" || params.kind === "system")) {
+        const deduped = dropRepeatedBriefItems(parsed.optimized);
+        parsed.optimized = deduped.optimized;
+        if (deduped.removed.length) {
+          const described = dropMentionsOfRemoved(deduped.removed, parsed.summary, parsed.changes);
+          parsed.summary = described.summary || NO_SUMMARY;
+          parsed.changes = described.changes;
+        }
       }
       if (hasSubjectPrefix) {
         parsed.optimized = enforceIdentityLock(

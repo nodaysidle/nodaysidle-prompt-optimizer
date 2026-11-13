@@ -177,6 +177,62 @@ export function dropMentionsOfRemoved(
   };
 }
 
+// Share of a bullet's tokens one earlier line must hold for the bullet to count as a restatement.
+const REPEAT_SHARE = 0.8;
+const NEGATION_RE = /\b(?:not|no|never|without|cannot)\b|n['’]t\b/i;
+const BULLET_RE = /^\s*(?:[-*]|\d+\.)\s+(.+)$/;
+
+function stemmedTokens(text: string): Set<string> {
+  return new Set([...tokens(text)].map((t) => (t.length > 4 ? t.replace(/s$/, "") : t)));
+}
+
+function restates(bullet: string, own: Set<string>, earlier: { text: string; tokens: Set<string> }): boolean {
+  if (NEGATION_RE.test(bullet) && !NEGATION_RE.test(earlier.text)) return false;
+  let hits = 0;
+  for (const t of own) {
+    if (earlier.tokens.has(t)) hits++;
+    else if (/\d/.test(t)) return false;
+  }
+  return hits / own.size >= REPEAT_SHARE;
+}
+
+/** Removes brief bullets that only restate an earlier line; returns headings of sections left empty. */
+export function dropRepeatedBriefItems(optimized: string): { optimized: string; removed: string[] } {
+  if (optimized.includes("```")) return { optimized, removed: [] };
+  const { lead, sections } = splitSections(optimized);
+  const earlier: { text: string; tokens: Set<string> }[] = [];
+  const removed: string[] = [];
+  let dropped = false;
+
+  const keepLines = (lines: string[], isConstraints: boolean): string[] =>
+    lines.filter((line) => {
+      const bullet = BULLET_RE.exec(line);
+      if (!bullet) {
+        for (const sentence of line.split(/(?<=[.!?])\s+/))
+          if (sentence.trim()) earlier.push({ text: sentence, tokens: stemmedTokens(sentence) });
+        return true;
+      }
+      const own = stemmedTokens(bullet[1]);
+      if (!isConstraints && own.size >= 2 && earlier.some((item) => restates(bullet[1], own, item))) {
+        dropped = true;
+        return false;
+      }
+      earlier.push({ text: bullet[1], tokens: own });
+      return true;
+    });
+
+  const out = [keepLines(lead.split("\n"), false).join("\n")];
+  for (const section of sections) {
+    const [headingLine, ...body] = section.text.split("\n");
+    const kept = keepLines(body, /^constraints?$/i.test(section.heading));
+    const emptied = kept.length < body.length && !kept.some((line) => line.trim());
+    if (emptied) removed.push(section.heading);
+    else out.push([headingLine, ...kept].join("\n"));
+  }
+  if (!dropped) return { optimized, removed: [] };
+  return { optimized: out.join("\n").replace(/\n{3,}/g, "\n\n").trim(), removed };
+}
+
 const GENERIC_QUESTION_RE = /^what (?:result )?(?:counts as|is) (?:a )?success/i;
 const STOP_WORDS = new Set(["the", "a", "an", "or", "and", "of", "to", "be", "is", "it", "should", "this", "that", "for", "in", "on", "may", "any", "do", "does", "which", "what", "are", "you", "your", "my", "i", "only"]);
 

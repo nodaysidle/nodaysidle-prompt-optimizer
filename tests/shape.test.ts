@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dropMentionsOfRemoved, enforceFaithfulShape as shape, tidyQuestions } from "@/lib/shape";
+import { dropMentionsOfRemoved, dropRepeatedBriefItems as dedupe, enforceFaithfulShape as shape, tidyQuestions } from "@/lib/shape";
 
 const AUD = "make an audit of the repo in /dev/x/ and show me your findings";
 const PAYMENTS =
@@ -82,6 +82,88 @@ describe("enforceFaithfulShape", () => {
   });
   it("ignores image prompts", () => {
     expect(shape("a dragon", "## Context\nx", "structured", "image", []).removed).toEqual([]);
+  });
+});
+
+describe("dropRepeatedBriefItems", () => {
+  const LOGIN_BRIEF = [
+    "## Goal",
+    "Add login to my app using email magic links only, with no passwords.",
+    "",
+    "## Context",
+    "- Stack: next-auth v4 with the Prisma adapter, Next 15, vitest.",
+    "",
+    "## Requirements",
+    "- Login uses email magic links only.",
+    "- No password authentication.",
+    "- Tests must pass before you say done.",
+    "",
+    "## Constraints",
+    "- Use next-auth v4 with the Prisma adapter.",
+    "- Do not add password login.",
+  ].join("\n");
+  it("drops a Requirements bullet that restates the Goal and keeps everything else", () => {
+    const r = dedupe(LOGIN_BRIEF);
+    expect(r.optimized).not.toContain("- Login uses email magic links only.");
+    expect(r.optimized).toContain("- No password authentication.");
+    expect(r.optimized).toContain("- Tests must pass before you say done.");
+    expect(r.optimized).toContain("## Constraints\n- Use next-auth v4 with the Prisma adapter.\n- Do not add password login.");
+    expect(r.removed).toEqual([]);
+  });
+  it("drops a Context bullet that restates the Goal and keeps the Constraints", () => {
+    const shaped = shape(PAYMENTS, PAYMENTS_BRIEF, "structured", "user", []).optimized;
+    const r = dedupe(shaped);
+    expect(r.optimized).not.toContain("- There are three different backoff implementations in the retry logic.");
+    expect(r.optimized).toContain("- The service lives at `services/payments`.");
+    expect(r.optimized).toContain("- Do not change the public API.");
+    expect(r.optimized).toContain("- Do not touch the webhook handler.");
+    expect(r.removed).toEqual([]);
+  });
+  it("keeps a prohibition next to a positive line about the same thing", () => {
+    const out = "## Goal\nAdd login with passwords.\n\n## Requirements\n- Do not store passwords in plain text for login.";
+    expect(dedupe(out)).toEqual({ optimized: out, removed: [] });
+  });
+  it("never lets a positive line swallow a prohibition that uses all its words", () => {
+    const out = "## Goal\nStore passwords in plain text for login.\n\n## Requirements\n- Do not store passwords in plain text for login.";
+    expect(dedupe(out)).toEqual({ optimized: out, removed: [] });
+  });
+  it("drops a prohibition that repeats an earlier prohibition", () => {
+    const out = "## Goal\nShip login and never store passwords in plain text.\n\n## Requirements\n- Never store passwords in plain text.\n- Use email links.";
+    expect(dedupe(out)).toEqual({
+      optimized: "## Goal\nShip login and never store passwords in plain text.\n\n## Requirements\n- Use email links.",
+      removed: [],
+    });
+  });
+  it("keeps a bullet that adds a number", () => {
+    const out = "## Context\n- Stack: next-auth with the Prisma adapter.\n\n## Requirements\n- Use next-auth v4 with the Prisma adapter.";
+    expect(dedupe(out)).toEqual({ optimized: out, removed: [] });
+  });
+  it("removes a section left empty and names it", () => {
+    const out = "## Goal\nAdd login with email magic links.\n\n## Context\n- Login with email magic links.\n\n## Constraints\n- Do not add passwords.";
+    expect(dedupe(out)).toEqual({
+      optimized: "## Goal\nAdd login with email magic links.\n\n## Constraints\n- Do not add passwords.",
+      removed: ["Context"],
+    });
+  });
+  it("keeps the first statement and does not let a dropped bullet cover later ones", () => {
+    const out =
+      "## Goal\nFix the flaky checkout test before the release.\n\n## Requirements\n- Fix the flaky checkout test before Friday's release.\n- Friday release checkout test.";
+    // The second bullet is only covered by the dropped one, so it stays.
+    expect(dedupe(out).optimized).toBe(
+      "## Goal\nFix the flaky checkout test before the release.\n\n## Requirements\n- Friday release checkout test.",
+    );
+  });
+  it("never drops a Constraints bullet or a one-token bullet", () => {
+    const out = "## Goal\nKeep the public API unchanged.\n\n## Requirements\n- Unchanged.\n\n## Constraints\n- Keep the public API unchanged.";
+    expect(dedupe(out)).toEqual({ optimized: out, removed: [] });
+  });
+  it("returns a brief with no repeats unchanged", () => {
+    const out = "## Goal\nAdd login.\n\n## Requirements\n- Use email magic links.\n- Tests must pass.";
+    expect(dedupe(out)).toEqual({ optimized: out, removed: [] });
+  });
+  it("leaves text with a fenced code block unchanged", () => {
+    const out = "## Goal\nRun the script.\n\n```sh\nnpm test\n```\n\n## Requirements\n- Run the script.";
+    expect(dedupe(out)).toEqual({ optimized: out, removed: [] });
   });
 });
 
